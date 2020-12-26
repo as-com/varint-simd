@@ -12,6 +12,7 @@ edition = "2018"
 criterion = "0.3"
 integer-encoding = "2.1"
 rand = "0.8"
+bytes = "1" # prost-varint
 
 [[bench]]
 name = "varint_bench"
