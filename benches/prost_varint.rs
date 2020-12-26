@@ -1,10 +1,10 @@
-use std::cmp::min;
 use bytes::Buf;
+use std::cmp::min;
 
 /// Decodes a LEB128-encoded variable length integer from the buffer.
 pub fn decode_varint<B>(buf: &mut B) -> Result<u64, ()>
-    where
-        B: Buf,
+where
+    B: Buf,
 {
     let bytes = buf.chunk();
     let len = bytes.len();
@@ -116,8 +116,8 @@ unsafe fn decode_varint_slice(bytes: &[u8]) -> Result<(u64, usize), ()> {
 /// necessary.
 #[inline(never)]
 fn decode_varint_slow<B>(buf: &mut B) -> Result<u64, ()>
-    where
-        B: Buf,
+where
+    B: Buf,
 {
     let mut value = 0;
     for count in 0..min(10, buf.remaining()) {
