@@ -11,6 +11,7 @@ edition = "2018"
 [dev-dependencies]
 criterion = "0.3"
 integer-encoding = "2.1"
+rand = "0.8"
 
 [[bench]]
 name = "varint_bench"
