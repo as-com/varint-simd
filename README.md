@@ -13,10 +13,10 @@ Very fast varint encoder and decoder written in Rust.
 #### Decode
 |   | varint-simd unsafe | varint-simd safe | integer-encoding-rs | prost |
 | -- | -- | -- | -- | -- |
-| `u8`  | **2.27 ns** | **3.79 ns** | 8.68 ns | 73.3 ns |
-| `u16` | **3.04 ns** | **3.36 ns** | 7.63 ns | 71.0 ns |
-| `u32` | **4.30 ns** | **4.69 ns** | 8.26 ns | 69.7 ns |
-| `u64` | **7.50 ns** | **7.81 ns** | 13.3 ns | 74.1 ns |
+| `u8`  | **2.27 ns** | **3.19 ns** | 8.68 ns | 73.3 ns |
+| `u16` | **3.04 ns** | **3.88 ns** | 7.63 ns | 71.0 ns |
+| `u32` | **4.30 ns** | **5.24 ns** | 8.26 ns | 69.7 ns |
+| `u64` | **7.50 ns** | **8.68 ns** | 13.3 ns | 74.1 ns |
 
 #### Encode
 |   | varint-simd | integer-encoding-rs | prost |
@@ -30,10 +30,10 @@ Very fast varint encoder and decoder written in Rust.
 #### Decode
 |   | varint-simd unsafe | varint-simd safe | integer-encoding-rs | prost |
 | -- | -- | -- | -- | -- |
-| `u8`  | **2.75 ns** | **3.79 ns** | 8.00 ns | 38.2 ns |
-| `u16` | **3.34 ns** | **3.90 ns** | 7.54 ns | 35.6 ns |
-| `u32` | **4.82 ns** | **4.97 ns** | 7.88 ns | 34.9 ns |
-| `u64` | **6.94 ns** | **7.29 ns** | 13.4 ns | 40.0 ns |
+| `u8`  | **2.75 ns** | **3.48 ns** | 8.00 ns | 38.2 ns |
+| `u16` | **3.34 ns** | **3.95 ns** | 7.54 ns | 35.6 ns |
+| `u32` | **4.82 ns** | **5.10 ns** | 7.88 ns | 34.9 ns |
+| `u64` | **6.94 ns** | **7.91 ns** | 13.4 ns | 40.0 ns |
 
 #### Encode
 |   | varint-simd | integer-encoding-rs | prost |
