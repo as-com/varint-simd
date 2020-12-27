@@ -20,6 +20,10 @@ pub trait VarIntTarget: Debug + Eq + PartialEq + Sized + Copy {
     /// The maximum length of varint that is necessary to represent this number
     const MAX_VARINT_BYTES: u8;
 
+    /// The maximum value of the last byte if the varint is MAX_VARINT_BYTES long such that the
+    /// varint would not overflow the target
+    const MAX_LAST_VARINT_BYTE: u8;
+
     /// Converts a 128-bit vector to this number
     fn vector_to_num(res: [u8; 16]) -> Self;
 
@@ -29,6 +33,7 @@ pub trait VarIntTarget: Debug + Eq + PartialEq + Sized + Copy {
 
 impl VarIntTarget for u8 {
     const MAX_VARINT_BYTES: u8 = 2;
+    const MAX_LAST_VARINT_BYTE: u8 = 0b00000001;
 
     #[inline(always)]
     fn vector_to_num(res: [u8; 16]) -> Self {
@@ -47,6 +52,7 @@ impl VarIntTarget for u8 {
 
 impl VarIntTarget for u16 {
     const MAX_VARINT_BYTES: u8 = 3;
+    const MAX_LAST_VARINT_BYTE: u8 = 0b00000011;
 
     #[inline(always)]
     fn vector_to_num(res: [u8; 16]) -> Self {
@@ -66,6 +72,7 @@ impl VarIntTarget for u16 {
 
 impl VarIntTarget for u32 {
     const MAX_VARINT_BYTES: u8 = 5;
+    const MAX_LAST_VARINT_BYTE: u8 = 0b00001111;
 
     #[inline(always)]
     fn vector_to_num(res: [u8; 16]) -> Self {
@@ -91,6 +98,7 @@ impl VarIntTarget for u32 {
 
 impl VarIntTarget for u64 {
     const MAX_VARINT_BYTES: u8 = 10;
+    const MAX_LAST_VARINT_BYTE: u8 = 0b00000001;
 
     #[inline(always)]
     fn vector_to_num(res: [u8; 16]) -> Self {
@@ -147,7 +155,7 @@ pub fn decode<T: VarIntTarget>(bytes: &[u8]) -> Result<(T, u8), VarIntDecodeErro
     let result = if bytes.len() >= 16 {
         unsafe { decode_unsafe(bytes) }
     } else if bytes.len() >= 1 {
-        let mut data = [0u8;16];
+        let mut data = [0u8; 16];
         let len = min(10, bytes.len());
         data[..len].copy_from_slice(&bytes[..len]);
         unsafe { decode_unsafe(&data) }
@@ -155,7 +163,8 @@ pub fn decode<T: VarIntTarget>(bytes: &[u8]) -> Result<(T, u8), VarIntDecodeErro
         return Err(VarIntDecodeError::NotEnoughBytes);
     };
 
-    if result.1 > T::MAX_VARINT_BYTES {
+    if result.1 > T::MAX_VARINT_BYTES
+        || result.1 == T::MAX_VARINT_BYTES && bytes[(T::MAX_VARINT_BYTES - 1) as usize] > T::MAX_LAST_VARINT_BYTE {
         Err(VarIntDecodeError::Overflow)
     } else {
         Ok(result)
@@ -166,7 +175,8 @@ pub fn decode<T: VarIntTarget>(bytes: &[u8]) -> Result<(T, u8), VarIntDecodeErro
 ///
 /// There must be at least 16 bytes of allocated memory after the beginning of the pointer.
 /// Otherwise, there may be undefined behavior. Any data after the end of the varint is ignored.
-/// Behavior is undefined if the varint represents a number too large for the target type.
+/// A truncated value will be returned if the varint represents a number too large for the target
+/// type.
 ///
 /// You may prefer to use this unsafe interface if you know what you are doing and need a little
 /// extra performance.
