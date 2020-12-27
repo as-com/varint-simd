@@ -314,7 +314,7 @@ pub unsafe fn encode_unsafe<T: VarIntTarget>(num: T) -> ([u8; 16], u8) {
 
 #[cfg(test)]
 mod tests {
-    use crate::{VarIntTarget, encode, decode, encode_zigzag, decode_zigzag};
+    use crate::{VarIntTarget, encode, decode};
 
     #[test]
     fn it_works() {
@@ -433,5 +433,28 @@ mod tests {
             u64::MAX,
             &[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x01],
         );
+    }
+
+    #[test]
+    fn overflow_u8() {
+        let encoded = encode(u8::MAX as u16 + 1);
+        decode::<u8>(&encoded.0).expect_err("should overflow");
+    }
+
+    #[test]
+    fn overflow_u16() {
+        let encoded = encode(u16::MAX as u32 + 1);
+        decode::<u16>(&encoded.0).expect_err("should overflow");
+    }
+
+    #[test]
+    fn overflow_u32() {
+        let encoded = encode(u32::MAX as u64 + 1);
+        decode::<u32>(&encoded.0).expect_err("should overflow");
+    }
+
+    #[test]
+    fn overflow_u64() {
+        decode::<u8>(&[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x02]).expect_err("should overflow");
     }
 }

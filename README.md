@@ -55,7 +55,7 @@ your input data won't cause undefined behavior and your calling code can tolerat
 
 ## Benchmarks
 The benchmarks below reflect the performance of decoding and encoding a sequence of random integers bounded by each 
-integer size. For more details, please see [the source code for these benchmarks](benches/varint_bench.rs)
+integer size. For more details, please see [the source code for these benchmarks](benches/varint_bench.rs).
 
 ### Intel Core i7-8850H "Coffee Lake" (2018 15" MacBook Pro)
 
