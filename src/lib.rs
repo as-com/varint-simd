@@ -1,22 +1,24 @@
+/*!
+`varint_simd` is a fast SIMD-accelerated [variable-length integer](https://developers.google.com/protocol-buffers/docs/encoding)
+encoder and decoder written in Rust.
+
+For more information, please see the [README](https://github.com/as-com/varint-simd#readme).
+*/
+
 #[cfg(target_arch = "x86")]
 use core::arch::x86 as arch;
 
 #[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::*;
+
 use std::cmp::min;
 use std::fmt::Debug;
 
-// Functions to help with debugging
-fn slice_m128i(n: __m128i) -> [i8; 16] {
-    unsafe { std::mem::transmute(n) }
-}
-
-fn slice_m256i(n: __m256i) -> [i8; 32] {
-    unsafe { std::mem::transmute(n) }
-}
-
-/// Represents a scalar value that can be encoded to and decoded from a varint.
+/// Represents an unsigned scalar value that can be encoded to and decoded from a varint.
 pub trait VarIntTarget: Debug + Eq + PartialEq + Sized + Copy {
+    /// The signed version of this type
+    type Signed;
+
     /// The maximum length of varint that is necessary to represent this number
     const MAX_VARINT_BYTES: u8;
 
@@ -29,9 +31,16 @@ pub trait VarIntTarget: Debug + Eq + PartialEq + Sized + Copy {
 
     /// Splits this number into 7-bit segments for encoding
     fn num_to_vector_stage1(self) -> [u8; 16];
+
+    /// ZigZag encodes this value
+    fn zigzag(from: Self::Signed) -> Self;
+
+    /// ZigZag decodes this value
+    fn unzigzag(self) -> Self::Signed;
 }
 
 impl VarIntTarget for u8 {
+    type Signed = i8;
     const MAX_VARINT_BYTES: u8 = 2;
     const MAX_LAST_VARINT_BYTE: u8 = 0b00000001;
 
@@ -48,9 +57,20 @@ impl VarIntTarget for u8 {
 
         res
     }
+
+    #[inline(always)]
+    fn zigzag(from: Self::Signed) -> Self {
+        ((from << 1) ^ (from >> 7)) as Self
+    }
+
+    #[inline(always)]
+    fn unzigzag(self) -> Self::Signed {
+        ((self >> 1) ^ (-((self & 1) as i8)) as u8) as i8
+    }
 }
 
 impl VarIntTarget for u16 {
+    type Signed = i16;
     const MAX_VARINT_BYTES: u8 = 3;
     const MAX_LAST_VARINT_BYTE: u8 = 0b00000011;
 
@@ -68,9 +88,20 @@ impl VarIntTarget for u16 {
 
         res
     }
+
+    #[inline(always)]
+    fn zigzag(from: Self::Signed) -> Self {
+        ((from << 1) ^ (from >> 15)) as Self
+    }
+
+    #[inline(always)]
+    fn unzigzag(self) -> Self::Signed {
+        ((self >> 1) ^ (-((self & 1) as i16)) as u16) as i16
+    }
 }
 
 impl VarIntTarget for u32 {
+    type Signed = i32;
     const MAX_VARINT_BYTES: u8 = 5;
     const MAX_LAST_VARINT_BYTE: u8 = 0b00001111;
 
@@ -94,9 +125,20 @@ impl VarIntTarget for u32 {
 
         res
     }
+
+    #[inline(always)]
+    fn zigzag(from: Self::Signed) -> Self {
+        ((from << 1) ^ (from >> 31)) as Self
+    }
+
+    #[inline(always)]
+    fn unzigzag(self) -> Self::Signed {
+        ((self >> 1) ^ (-((self & 1) as i32)) as u32) as i32
+    }
 }
 
 impl VarIntTarget for u64 {
+    type Signed = i64;
     const MAX_VARINT_BYTES: u8 = 10;
     const MAX_LAST_VARINT_BYTE: u8 = 0b00000001;
 
@@ -132,6 +174,25 @@ impl VarIntTarget for u64 {
 
         res
     }
+
+    #[inline(always)]
+    fn zigzag(from: Self::Signed) -> Self {
+        ((from << 1) ^ (from >> 63)) as Self
+    }
+
+    #[inline(always)]
+    fn unzigzag(self) -> Self::Signed {
+        ((self >> 1) ^ (-((self & 1) as i64)) as u64) as i64
+    }
+}
+
+// Functions to help with debugging
+fn slice_m128i(n: __m128i) -> [i8; 16] {
+    unsafe { std::mem::transmute(n) }
+}
+
+fn slice_m256i(n: __m256i) -> [i8; 32] {
+    unsafe { std::mem::transmute(n) }
 }
 
 #[derive(Debug)]
@@ -148,8 +209,10 @@ impl std::fmt::Display for VarIntDecodeError {
 
 impl std::error::Error for VarIntDecodeError {}
 
-/// Decodes a single varint from the input slice. Requires SSSE3 support. For best performance,
-/// provide a slice at least 16 bytes in length, or use the unsafe version directly.
+/// Decodes a single varint from the input slice. Requires SSSE3 support.
+///
+/// Produces a tuple containing the decoded number and the number of bytes read. For best
+/// performance, provide a slice at least 16 bytes in length, or use the unsafe version directly.
 #[inline]
 pub fn decode<T: VarIntTarget>(bytes: &[u8]) -> Result<(T, u8), VarIntDecodeError> {
     let result = if bytes.len() >= 16 {
@@ -169,6 +232,13 @@ pub fn decode<T: VarIntTarget>(bytes: &[u8]) -> Result<(T, u8), VarIntDecodeErro
     } else {
         Ok(result)
     }
+}
+
+/// Convenience function for decoding a single varint in ZigZag format from the input slice.
+/// See also: [`decode`]
+#[inline]
+pub fn decode_zigzag<T: VarIntTarget>(bytes: &[u8]) -> Result<(T::Signed, u8), VarIntDecodeError> {
+    decode::<T>(bytes).map(|r| (r.0.unzigzag(), r.1))
 }
 
 /// Decodes a single varint from the input slice. Requires SSSE3 support.
@@ -304,15 +374,26 @@ pub unsafe fn decode_three_unsafe<T: VarIntTarget, U: VarIntTarget, V: VarIntTar
      third_result, third_len as u8)
 }
 
-/// Encodes a single number to a varint. Produces a tuple, with the encoded data followed by the
-/// number of bytes used to encode the varint.
+/// Encodes a single number to a varint. Requires SSE2 support.
+///
+/// Produces a tuple, with the encoded data followed by the number of bytes used to encode the
+/// varint.
 #[inline]
 pub fn encode<T: VarIntTarget>(num: T) -> ([u8; 16], u8) {
     unsafe { encode_unsafe(num) }
 }
 
+/// Convenience function for encoding a single signed integer in ZigZag format to a varint.
+/// See also: [`encode`]
+#[inline]
+pub fn encode_zigzag<T: VarIntTarget>(num: T::Signed) -> ([u8; 16], u8) {
+    unsafe { encode_unsafe(T::zigzag(num)) }
+}
+
 /// Encodes a single number to a varint, and writes the resulting data to the slice. Returns the
-/// number of bytes written.
+/// number of bytes written (maximum 10 bytes).
+///
+/// See also: [`encode`]
 ///
 /// **Panics:** if the slice is too small to contain the varint.
 #[inline]
@@ -323,8 +404,10 @@ pub fn encode_to_slice<T: VarIntTarget>(num: T, slice: &mut [u8]) -> u8 {
     size
 }
 
-/// Encodes a single number to a varint. Produces a tuple, with the encoded data followed by the
-/// number of bytes used to encode the varint.
+/// Encodes a single number to a varint. Requires SSE2 support.
+///
+/// Produces a tuple, with the encoded data followed by the number of bytes used to encode the
+/// varint.
 #[inline]
 pub unsafe fn encode_unsafe<T: VarIntTarget>(num: T) -> ([u8; 16], u8) {
     // Break the number into 7-bit parts and spread them out into a vector
