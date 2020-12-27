@@ -37,6 +37,10 @@ fn main() {
 }
 ```
 
+The type parameter passed into the encode/decode functions greatly affects performance - the code takes shorter paths
+for shorter integers, and may exhibit comparatively poor performance if you're decoding a lot of tiny integers 
+into u64's.
+
 ## Safety
 This crate uses *a lot* of unsafe code. Please exercise caution, although I do not expect there to be major issues.
 
@@ -85,11 +89,12 @@ integer size. For more details, please see [the source code for these benchmarks
 | `u64` | **6.26 ns** | 14.1 ns | 76.4 ns |
 
 ## TODO
+* Further optimization (I'm pretty sure I left some performance on the table)
 * Support for ARM NEON
 * Fallback scalar implementation
 * Decode multiple varints in one call using AVX2 (currently implemented but with very poor performance, more work needed)
 
-Pull requests are welcome. 🙂
+Contributions are welcome. 🙂
 
 ## License
 
