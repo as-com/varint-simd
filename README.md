@@ -1,7 +1,46 @@
 varint-simd
 ==
 
-Very fast varint encoder and decoder written in Rust.
+Very fast SIMD-accelerated [variable-length integer](https://developers.google.com/protocol-buffers/docs/encoding) encoder and decoder 
+written in Rust. 
+
+Currently targets x86_64 processors with support for SSSE3 (Intel Core/AMD Bulldozer or newer), with 
+optional optimizations for processors supporting POPCNT and LZCNT, and limited auto-vectorization
+for processors supporting AVX2. 
+
+## Usage
+**Important:** For optimal performance, ensure the Rust compiler has an appropriate `target-cpu` setting. An example is
+provided in [`.cargo/config`](.cargo/config), but you may need to edit the file to specify the oldest CPUs your binaries
+will support.
+
+```rust
+use varint_simd::{encode, decode};
+
+fn main() {
+  let num: u32 = 300;
+  
+  let encoded = encode::<u32>(num); // turbofish for demonstration purposes, usually not necessary
+  // encoded now contains a tuple
+  // (
+  //    [0xAC, 0x02, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], // encoded in a 128-bit vector
+  //    2 // the number of bytes encoded
+  // )
+  
+  let decoded = decode::<u32>(encoded.0).unwrap();
+  // decoded now contains another tuple:
+  // (
+  //    300, // the decoded number
+  //    2 // the number of bytes read from the slice
+  // )
+  assert_eq!(decoded.0, num);
+}
+```
+
+## Safety
+This crate uses *a lot* of unsafe code. Please exercise caution, although I do not expect there to be major issues.
+
+There is also an optional "unsafe" interface for bypassing overflow and bounds checks. This can be used when you know 
+your input data won't cause undefined behavior and your calling code can tolerate truncated numbers.
 
 ## Benchmarks
 [Source code for benchmarks](benches/varint_bench.rs)
@@ -42,6 +81,13 @@ Very fast varint encoder and decoder written in Rust.
 | `u16` | **4.14 ns** | 7.26 ns | 64.3 ns |
 | `u32` | **4.89 ns** | 8.50 ns | 64.0 ns |
 | `u64` | **6.26 ns** | 14.1 ns | 76.4 ns |
+
+## TODO
+* Support for ARM NEON
+* Fallback scalar implementation
+* Decode multiple varints in one call using AVX2 (currently implemented but with very poor performance, more work needed)
+
+Pull requests are welcome. 🙂
 
 ## License
 

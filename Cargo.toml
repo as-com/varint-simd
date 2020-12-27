@@ -3,6 +3,12 @@ name = "varint-simd"
 version = "0.1.0"
 authors = ["Andrew Sun <me@andrewsun.com>"]
 edition = "2018"
+license = "MIT OR Apache-2.0"
+description = "SIMD-accelerated varint encoder and decoder"
+repository = "https://github.com/as-com/varint-simd"
+readme = "https://github.com/as-com/varint-simd#readme"
+keywords = ["varint", "simd"]
+categories = ["encoding", "parser-implementations"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
