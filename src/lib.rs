@@ -2,7 +2,7 @@
 `varint_simd` is a fast SIMD-accelerated [variable-length integer](https://developers.google.com/protocol-buffers/docs/encoding)
 encoder and decoder written in Rust.
 
-For more information, please see the [README](https://github.com/as-com/varint-simd#readme).
+**For more information, please see the [README](https://github.com/as-com/varint-simd#readme).**
 */
 
 #[cfg(target_arch = "x86")]
@@ -13,184 +13,18 @@ use std::arch::x86_64::*;
 
 use std::cmp::min;
 use std::fmt::Debug;
+pub mod num;
 
-/// Represents an unsigned scalar value that can be encoded to and decoded from a varint.
-pub trait VarIntTarget: Debug + Eq + PartialEq + Sized + Copy {
-    /// The signed version of this type
-    type Signed;
-
-    /// The maximum length of varint that is necessary to represent this number
-    const MAX_VARINT_BYTES: u8;
-
-    /// The maximum value of the last byte if the varint is MAX_VARINT_BYTES long such that the
-    /// varint would not overflow the target
-    const MAX_LAST_VARINT_BYTE: u8;
-
-    /// Converts a 128-bit vector to this number
-    fn vector_to_num(res: [u8; 16]) -> Self;
-
-    /// Splits this number into 7-bit segments for encoding
-    fn num_to_vector_stage1(self) -> [u8; 16];
-
-    /// ZigZag encodes this value
-    fn zigzag(from: Self::Signed) -> Self;
-
-    /// ZigZag decodes this value
-    fn unzigzag(self) -> Self::Signed;
-}
-
-impl VarIntTarget for u8 {
-    type Signed = i8;
-    const MAX_VARINT_BYTES: u8 = 2;
-    const MAX_LAST_VARINT_BYTE: u8 = 0b00000001;
-
-    #[inline(always)]
-    fn vector_to_num(res: [u8; 16]) -> Self {
-        (res[0] as u8) | ((res[1] as u8) << 7)
-    }
-
-    #[inline(always)]
-    fn num_to_vector_stage1(self) -> [u8; 16] {
-        let mut res = [0u8; 16];
-        res[0] = self & 127;
-        res[1] = (self >> 7) & 127;
-
-        res
-    }
-
-    #[inline(always)]
-    fn zigzag(from: Self::Signed) -> Self {
-        ((from << 1) ^ (from >> 7)) as Self
-    }
-
-    #[inline(always)]
-    fn unzigzag(self) -> Self::Signed {
-        ((self >> 1) ^ (-((self & 1) as i8)) as u8) as i8
-    }
-}
-
-impl VarIntTarget for u16 {
-    type Signed = i16;
-    const MAX_VARINT_BYTES: u8 = 3;
-    const MAX_LAST_VARINT_BYTE: u8 = 0b00000011;
-
-    #[inline(always)]
-    fn vector_to_num(res: [u8; 16]) -> Self {
-        (res[0] as u16) | ((res[1] as u16) << 7) | ((res[2] as u16) << 2 * 7)
-    }
-
-    #[inline(always)]
-    fn num_to_vector_stage1(self) -> [u8; 16] {
-        let mut res = [0u8; 16];
-        res[0] = self as u8 & 127;
-        res[1] = (self >> 7) as u8 & 127;
-        res[2] = (self >> 2 * 7) as u8 & 127;
-
-        res
-    }
-
-    #[inline(always)]
-    fn zigzag(from: Self::Signed) -> Self {
-        ((from << 1) ^ (from >> 15)) as Self
-    }
-
-    #[inline(always)]
-    fn unzigzag(self) -> Self::Signed {
-        ((self >> 1) ^ (-((self & 1) as i16)) as u16) as i16
-    }
-}
-
-impl VarIntTarget for u32 {
-    type Signed = i32;
-    const MAX_VARINT_BYTES: u8 = 5;
-    const MAX_LAST_VARINT_BYTE: u8 = 0b00001111;
-
-    #[inline(always)]
-    fn vector_to_num(res: [u8; 16]) -> Self {
-        (res[0] as u32)
-            | ((res[1] as u32) << 7)
-            | ((res[2] as u32) << 2 * 7)
-            | ((res[3] as u32) << 3 * 7)
-            | ((res[4] as u32) << 4 * 7)
-    }
-
-    #[inline(always)]
-    fn num_to_vector_stage1(self) -> [u8; 16] {
-        let mut res = [0u8; 16];
-        res[0] = self as u8 & 127;
-        res[1] = (self >> 7) as u8 & 127;
-        res[2] = (self >> 2 * 7) as u8 & 127;
-        res[3] = (self >> 3 * 7) as u8 & 127;
-        res[4] = (self >> 4 * 7) as u8 & 127;
-
-        res
-    }
-
-    #[inline(always)]
-    fn zigzag(from: Self::Signed) -> Self {
-        ((from << 1) ^ (from >> 31)) as Self
-    }
-
-    #[inline(always)]
-    fn unzigzag(self) -> Self::Signed {
-        ((self >> 1) ^ (-((self & 1) as i32)) as u32) as i32
-    }
-}
-
-impl VarIntTarget for u64 {
-    type Signed = i64;
-    const MAX_VARINT_BYTES: u8 = 10;
-    const MAX_LAST_VARINT_BYTE: u8 = 0b00000001;
-
-    #[inline(always)]
-    fn vector_to_num(res: [u8; 16]) -> Self {
-        // This line should be auto-vectorized when compiling for AVX2-capable processors
-        // TODO: Find out a way to make these run faster on older processors
-        (res[0] as u64)
-            | ((res[1] as u64) << 7)
-            | ((res[2] as u64) << 2 * 7)
-            | ((res[3] as u64) << 3 * 7)
-            | ((res[4] as u64) << 4 * 7)
-            | ((res[5] as u64) << 5 * 7)
-            | ((res[6] as u64) << 6 * 7)
-            | ((res[7] as u64) << 7 * 7)
-            | ((res[8] as u64) << 8 * 7)
-            | ((res[9] as u64) << 9 * 7)
-    }
-
-    #[inline(always)]
-    fn num_to_vector_stage1(self) -> [u8; 16] {
-        let mut res = [0u8; 16];
-        res[0] = self as u8 & 127;
-        res[1] = (self >> 7) as u8 & 127;
-        res[2] = (self >> 2 * 7) as u8 & 127;
-        res[3] = (self >> 3 * 7) as u8 & 127;
-        res[4] = (self >> 4 * 7) as u8 & 127;
-        res[5] = (self >> 5 * 7) as u8 & 127;
-        res[6] = (self >> 6 * 7) as u8 & 127;
-        res[7] = (self >> 7 * 7) as u8 & 127;
-        res[8] = (self >> 8 * 7) as u8 & 127;
-        res[9] = (self >> 9 * 7) as u8 & 127;
-
-        res
-    }
-
-    #[inline(always)]
-    fn zigzag(from: Self::Signed) -> Self {
-        ((from << 1) ^ (from >> 63)) as Self
-    }
-
-    #[inline(always)]
-    fn unzigzag(self) -> Self::Signed {
-        ((self >> 1) ^ (-((self & 1) as i64)) as u64) as i64
-    }
-}
+use num::VarIntTarget;
+use crate::num::SignedVarIntTarget;
 
 // Functions to help with debugging
+#[allow(dead_code)]
 fn slice_m128i(n: __m128i) -> [i8; 16] {
     unsafe { std::mem::transmute(n) }
 }
 
+#[allow(dead_code)]
 fn slice_m256i(n: __m256i) -> [i8; 32] {
     unsafe { std::mem::transmute(n) }
 }
@@ -213,6 +47,17 @@ impl std::error::Error for VarIntDecodeError {}
 ///
 /// Produces a tuple containing the decoded number and the number of bytes read. For best
 /// performance, provide a slice at least 16 bytes in length, or use the unsafe version directly.
+///
+/// # Examples
+/// ```
+/// use varint_simd::{decode, VarIntDecodeError};
+///
+/// fn main() -> Result<(), VarIntDecodeError> {
+///     let decoded = decode::<u32>(&[185, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])?;
+///     assert_eq!(decoded, (1337, 2));
+///     Ok(())
+/// }
+/// ```
 #[inline]
 pub fn decode<T: VarIntTarget>(bytes: &[u8]) -> Result<(T, u8), VarIntDecodeError> {
     let result = if bytes.len() >= 16 {
@@ -236,9 +81,23 @@ pub fn decode<T: VarIntTarget>(bytes: &[u8]) -> Result<(T, u8), VarIntDecodeErro
 
 /// Convenience function for decoding a single varint in ZigZag format from the input slice.
 /// See also: [`decode`]
+///
+/// Note: the type parameter should be the number type's unsigned counterpart. The return value will
+/// still be signed.
+///
+/// # Examples
+/// ```
+/// use varint_simd::{decode_zigzag, VarIntDecodeError};
+///
+/// fn main() -> Result<(), VarIntDecodeError> {
+///     let decoded = decode_zigzag::<i32>(&[39, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])?;
+///     assert_eq!(decoded, (-20, 1));
+///     Ok(())
+/// }
+/// ```
 #[inline]
-pub fn decode_zigzag<T: VarIntTarget>(bytes: &[u8]) -> Result<(T::Signed, u8), VarIntDecodeError> {
-    decode::<T>(bytes).map(|r| (r.0.unzigzag(), r.1))
+pub fn decode_zigzag<T: SignedVarIntTarget>(bytes: &[u8]) -> Result<(T, u8), VarIntDecodeError> {
+    decode::<T::Unsigned>(bytes).map(|r| (r.0.unzigzag(), r.1))
 }
 
 /// Decodes a single varint from the input slice. Requires SSSE3 support.
@@ -378,6 +237,14 @@ pub unsafe fn decode_three_unsafe<T: VarIntTarget, U: VarIntTarget, V: VarIntTar
 ///
 /// Produces a tuple, with the encoded data followed by the number of bytes used to encode the
 /// varint.
+///
+/// # Examples
+/// ```
+/// use varint_simd::encode;
+///
+/// let encoded = encode::<u32>(1337);
+/// assert_eq!(encoded, ([185, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 2));
+/// ```
 #[inline]
 pub fn encode<T: VarIntTarget>(num: T) -> ([u8; 16], u8) {
     unsafe { encode_unsafe(num) }
@@ -385,9 +252,17 @@ pub fn encode<T: VarIntTarget>(num: T) -> ([u8; 16], u8) {
 
 /// Convenience function for encoding a single signed integer in ZigZag format to a varint.
 /// See also: [`encode`]
+///
+/// # Examples
+/// ```
+/// use varint_simd::encode_zigzag;
+///
+/// let encoded = encode_zigzag::<i32>(-20);
+/// assert_eq!(encoded, ([39, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 1));
+/// ```
 #[inline]
-pub fn encode_zigzag<T: VarIntTarget>(num: T::Signed) -> ([u8; 16], u8) {
-    unsafe { encode_unsafe(T::zigzag(num)) }
+pub fn encode_zigzag<T: SignedVarIntTarget>(num: T) -> ([u8; 16], u8) {
+    unsafe { encode_unsafe(T::Unsigned::zigzag(num)) }
 }
 
 /// Encodes a single number to a varint, and writes the resulting data to the slice. Returns the
@@ -439,7 +314,7 @@ pub unsafe fn encode_unsafe<T: VarIntTarget>(num: T) -> ([u8; 16], u8) {
 
 #[cfg(test)]
 mod tests {
-    use crate::{VarIntTarget, encode, decode};
+    use crate::{VarIntTarget, encode, decode, encode_zigzag, decode_zigzag};
 
     #[test]
     fn it_works() {

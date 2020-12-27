@@ -15,7 +15,7 @@ provided in [`.cargo/config`](.cargo/config), but you may need to edit the file 
 binaries will support.
 
 ```rust
-use varint_simd::{encode, decode};
+use varint_simd::{encode, decode, encode_zigzag, decode_zigzag};
 
 fn main() {
   let num: u32 = 300;
@@ -27,12 +27,18 @@ fn main() {
   //    2 // the number of bytes encoded
   // )
   
-  let decoded = decode::<u32>(encoded.0).unwrap();
+  let decoded = decode::<u32>(&encoded.0).unwrap();
   // decoded now contains another tuple:
   // (
   //    300, // the decoded number
   //    2 // the number of bytes read from the slice
   // )
+  assert_eq!(decoded.0, num);
+  
+  // Signed integers can be encoded/decoded with the convenience functions encode_zigzag and decode_zigzag
+  let num: i32 = -20;
+  let encoded = encode_zigzag::<i32>(num);
+  let decoded = decode_zigzag::<i32>(&encoded.0).unwrap();
   assert_eq!(decoded.0, num);
 }
 ```
