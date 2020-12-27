@@ -3,6 +3,8 @@ use core::arch::x86 as arch;
 
 #[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::*;
+use std::cmp::min;
+use crate::VarIntDecodeError::NotEnoughBytes;
 
 // Functions to help with debugging
 fn slice_m128i(n: __m128i) -> [i8; 16] {
@@ -122,10 +124,41 @@ impl VarIntTarget for u64 {
     }
 }
 
+#[derive(Debug)]
+pub enum VarIntDecodeError {
+    Overflow,
+    NotEnoughBytes,
+}
+
+/// Decodes a single varint from the input slice. Requires SSSE3 support.
+#[inline]
+pub fn decode<T: VarIntTarget>(bytes: &[u8]) -> Result<(T, u8), VarIntDecodeError> {
+    let result = if bytes.len() >= 16 {
+        unsafe { decode_unsafe(bytes) }
+    } else if bytes.len() >= 1 {
+        let mut data = [0u8;16];
+        let len = min(10, bytes.len());
+        data[..len].copy_from_slice(&bytes[..len]);
+        unsafe { decode_unsafe(&data) }
+    } else {
+        return Err(VarIntDecodeError::NotEnoughBytes);
+    };
+
+    if result.1 > T::MAX_VARINT_BYTES {
+        Err(VarIntDecodeError::Overflow)
+    } else {
+        Ok(result)
+    }
+}
+
 /// Decodes a single varint from the input slice. Requires SSSE3 support.
 ///
 /// There must be at least 16 bytes of allocated memory after the beginning of the pointer.
 /// Otherwise, there may be undefined behavior. Any data after the end of the varint is ignored.
+/// Behavior is undefined if the varint represents a number too large for the target type.
+///
+/// You may prefer to use this unsafe interface if you know what you are doing and need a little
+/// extra performance.
 #[inline]
 pub unsafe fn decode_unsafe<T: VarIntTarget>(bytes: &[u8]) -> (T, u8) {
     // It looks like you're trying to understand what this code does. You should probably read
@@ -184,6 +217,7 @@ pub unsafe fn decode_unsafe<T: VarIntTarget>(bytes: &[u8]) -> (T, u8) {
 /// There must be at least 32 bytes of memory allocated after the beginning of the pointer.
 /// Otherwise, there may be undefined behavior.
 #[inline]
+#[cfg(target_feature = "avx2")]
 pub unsafe fn decode_three_unsafe<T: VarIntTarget, U: VarIntTarget, V: VarIntTarget>(bytes: &[u8]) -> (T, u8, U, u8, V, u8) {
     let b = _mm256_loadu_si256(bytes.as_ptr() as *const __m256i);
 
@@ -249,8 +283,27 @@ pub unsafe fn decode_three_unsafe<T: VarIntTarget, U: VarIntTarget, V: VarIntTar
      third_result, third_len as u8)
 }
 
-/// Encodes a single varint. Produces a tuple, with the encoded data followed by the number of
-/// bytes used to encode the varint.
+/// Encodes a single number to a varint. Produces a tuple, with the encoded data followed by the
+/// number of bytes used to encode the varint.
+#[inline]
+pub fn encode<T: VarIntTarget>(num: T) -> ([u8; 16], u8) {
+    unsafe { encode_unsafe(num) }
+}
+
+/// Encodes a single number to a varint, and writes the resulting data to the slice. Returns the
+/// number of bytes written.
+///
+/// **Panics:** if the slice is too small to contain the varint.
+#[inline]
+pub fn encode_to_slice<T: VarIntTarget>(num: T, slice: &mut [u8]) -> u8 {
+    let (data, size) = encode(num);
+    slice[..size as usize].copy_from_slice(&data[..size as usize]);
+
+    size
+}
+
+/// Encodes a single number to a varint. Produces a tuple, with the encoded data followed by the
+/// number of bytes used to encode the varint.
 #[inline]
 pub unsafe fn encode_unsafe<T: VarIntTarget>(num: T) -> ([u8; 16], u8) {
     // Break the number into 7-bit parts and spread them out into a vector
@@ -283,6 +336,12 @@ mod tests {
             decode_unsafe::<u64>(&vec![
                 0xff, 0xff, 0xff, 0xff, 0xff, 0x0f, 0b10101100, 0b10101100, 0, 0, 0, 0b10101100, 0,
                 0, 0, 0, 1,
+            ])
+        });
+
+        println!("{:?}", unsafe {
+            decode_unsafe::<u64>(&vec![
+                0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff
             ])
         });
 
