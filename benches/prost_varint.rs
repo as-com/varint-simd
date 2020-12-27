@@ -1,5 +1,45 @@
-use bytes::Buf;
+use bytes::{Buf, BufMut};
 use std::cmp::min;
+
+/// Encodes an integer value into LEB128 variable length format, and writes it to the buffer.
+/// The buffer must have enough remaining space (maximum 10 bytes).
+#[inline]
+pub fn encode_varint<B>(mut value: u64, buf: &mut B)
+    where
+        B: BufMut,
+{
+    // Safety notes:
+    //
+    // - ptr::write is an unsafe raw pointer write. The use here is safe since the length of the
+    //   uninit slice is checked.
+    // - advance_mut is unsafe because it could cause uninitialized memory to be advanced over. The
+    //   use here is safe since each byte which is advanced over has been written to in the
+    //   previous loop iteration.
+    unsafe {
+        let mut i;
+        'outer: loop {
+            i = 0;
+
+            let uninit_slice = buf.chunk_mut();
+            for offset in 0..uninit_slice.len() {
+                i += 1;
+                let ptr = uninit_slice.as_mut_ptr().add(offset);
+                if value < 0x80 {
+                    ptr.write(value as u8);
+                    break 'outer;
+                } else {
+                    ptr.write(((value & 0x7F) | 0x80) as u8);
+                    value >>= 7;
+                }
+            }
+
+            buf.advance_mut(i);
+            debug_assert!(buf.has_remaining_mut());
+        }
+
+        buf.advance_mut(i);
+    }
+}
 
 /// Decodes a LEB128-encoded variable length integer from the buffer.
 pub fn decode_varint<B>(buf: &mut B) -> Result<u64, ()>
