@@ -5,8 +5,8 @@ use std::cmp::min;
 /// The buffer must have enough remaining space (maximum 10 bytes).
 #[inline]
 pub fn encode_varint<B>(mut value: u64, buf: &mut B)
-    where
-        B: BufMut,
+where
+    B: BufMut,
 {
     // Safety notes:
     //

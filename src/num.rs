@@ -62,7 +62,7 @@ impl VarIntTarget for u16 {
 
     #[inline(always)]
     fn vector_to_num(res: [u8; 16]) -> Self {
-        (res[0] as u16) | ((res[1] as u16) << 7) | ((res[2] as u16) << 2 * 7)
+        (res[0] as u16) | ((res[1] as u16) << 7) | ((res[2] as u16) << (2 * 7))
     }
 
     #[inline(always)]
@@ -70,7 +70,7 @@ impl VarIntTarget for u16 {
         let mut res = [0u8; 16];
         res[0] = self as u8 & 127;
         res[1] = (self >> 7) as u8 & 127;
-        res[2] = (self >> 2 * 7) as u8 & 127;
+        res[2] = (self >> (2 * 7)) as u8 & 127;
 
         res
     }
@@ -95,9 +95,9 @@ impl VarIntTarget for u32 {
     fn vector_to_num(res: [u8; 16]) -> Self {
         (res[0] as u32)
             | ((res[1] as u32) << 7)
-            | ((res[2] as u32) << 2 * 7)
-            | ((res[3] as u32) << 3 * 7)
-            | ((res[4] as u32) << 4 * 7)
+            | ((res[2] as u32) << (2 * 7))
+            | ((res[3] as u32) << (3 * 7))
+            | ((res[4] as u32) << (4 * 7))
     }
 
     #[inline(always)]
@@ -105,9 +105,9 @@ impl VarIntTarget for u32 {
         let mut res = [0u8; 16];
         res[0] = self as u8 & 127;
         res[1] = (self >> 7) as u8 & 127;
-        res[2] = (self >> 2 * 7) as u8 & 127;
-        res[3] = (self >> 3 * 7) as u8 & 127;
-        res[4] = (self >> 4 * 7) as u8 & 127;
+        res[2] = (self >> (2 * 7)) as u8 & 127;
+        res[3] = (self >> (3 * 7)) as u8 & 127;
+        res[4] = (self >> (4 * 7)) as u8 & 127;
 
         res
     }
@@ -134,14 +134,14 @@ impl VarIntTarget for u64 {
         // TODO: Find out a way to make these run faster on older processors
         (res[0] as u64)
             | ((res[1] as u64) << 7)
-            | ((res[2] as u64) << 2 * 7)
-            | ((res[3] as u64) << 3 * 7)
-            | ((res[4] as u64) << 4 * 7)
-            | ((res[5] as u64) << 5 * 7)
-            | ((res[6] as u64) << 6 * 7)
-            | ((res[7] as u64) << 7 * 7)
-            | ((res[8] as u64) << 8 * 7)
-            | ((res[9] as u64) << 9 * 7)
+            | ((res[2] as u64) << (2 * 7))
+            | ((res[3] as u64) << (3 * 7))
+            | ((res[4] as u64) << (4 * 7))
+            | ((res[5] as u64) << (5 * 7))
+            | ((res[6] as u64) << (6 * 7))
+            | ((res[7] as u64) << (7 * 7))
+            | ((res[8] as u64) << (8 * 7))
+            | ((res[9] as u64) << (9 * 7))
     }
 
     #[inline(always)]
@@ -149,14 +149,14 @@ impl VarIntTarget for u64 {
         let mut res = [0u8; 16];
         res[0] = self as u8 & 127;
         res[1] = (self >> 7) as u8 & 127;
-        res[2] = (self >> 2 * 7) as u8 & 127;
-        res[3] = (self >> 3 * 7) as u8 & 127;
-        res[4] = (self >> 4 * 7) as u8 & 127;
-        res[5] = (self >> 5 * 7) as u8 & 127;
-        res[6] = (self >> 6 * 7) as u8 & 127;
-        res[7] = (self >> 7 * 7) as u8 & 127;
-        res[8] = (self >> 8 * 7) as u8 & 127;
-        res[9] = (self >> 9 * 7) as u8 & 127;
+        res[2] = (self >> (2 * 7)) as u8 & 127;
+        res[3] = (self >> (3 * 7)) as u8 & 127;
+        res[4] = (self >> (4 * 7)) as u8 & 127;
+        res[5] = (self >> (5 * 7)) as u8 & 127;
+        res[6] = (self >> (6 * 7)) as u8 & 127;
+        res[7] = (self >> (7 * 7)) as u8 & 127;
+        res[8] = (self >> (8 * 7)) as u8 & 127;
+        res[9] = (self >> (9 * 7)) as u8 & 127;
 
         res
     }
@@ -188,7 +188,15 @@ pub trait SignedVarIntTarget: Debug + Eq + PartialEq + Sized + Copy {
     }
 }
 
-impl SignedVarIntTarget for i8 { type Unsigned = u8; }
-impl SignedVarIntTarget for i16 { type Unsigned = u16; }
-impl SignedVarIntTarget for i32 { type Unsigned = u32; }
-impl SignedVarIntTarget for i64 { type Unsigned = u64; }
+impl SignedVarIntTarget for i8 {
+    type Unsigned = u8;
+}
+impl SignedVarIntTarget for i16 {
+    type Unsigned = u16;
+}
+impl SignedVarIntTarget for i32 {
+    type Unsigned = u32;
+}
+impl SignedVarIntTarget for i64 {
+    type Unsigned = u64;
+}

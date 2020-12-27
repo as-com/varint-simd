@@ -15,8 +15,8 @@ use std::cmp::min;
 use std::fmt::Debug;
 pub mod num;
 
-use num::VarIntTarget;
 use crate::num::SignedVarIntTarget;
+use num::VarIntTarget;
 
 // Functions to help with debugging
 #[allow(dead_code)]
@@ -62,7 +62,7 @@ impl std::error::Error for VarIntDecodeError {}
 pub fn decode<T: VarIntTarget>(bytes: &[u8]) -> Result<(T, u8), VarIntDecodeError> {
     let result = if bytes.len() >= 16 {
         unsafe { decode_unsafe(bytes) }
-    } else if bytes.len() >= 1 {
+    } else if !bytes.is_empty() {
         let mut data = [0u8; 16];
         let len = min(10, bytes.len());
         data[..len].copy_from_slice(&bytes[..len]);
@@ -72,7 +72,9 @@ pub fn decode<T: VarIntTarget>(bytes: &[u8]) -> Result<(T, u8), VarIntDecodeErro
     };
 
     if result.1 > T::MAX_VARINT_BYTES
-        || result.1 == T::MAX_VARINT_BYTES && bytes[(T::MAX_VARINT_BYTES - 1) as usize] > T::MAX_LAST_VARINT_BYTE {
+        || result.1 == T::MAX_VARINT_BYTES
+            && bytes[(T::MAX_VARINT_BYTES - 1) as usize] > T::MAX_LAST_VARINT_BYTE
+    {
         Err(VarIntDecodeError::Overflow)
     } else {
         Ok(result)
@@ -102,6 +104,7 @@ pub fn decode_zigzag<T: SignedVarIntTarget>(bytes: &[u8]) -> Result<(T, u8), Var
 
 /// Decodes a single varint from the input slice. Requires SSSE3 support.
 ///
+/// # Safety
 /// There must be at least 16 bytes of allocated memory after the beginning of the pointer.
 /// Otherwise, there may be undefined behavior. Any data after the end of the varint is ignored.
 /// A truncated value will be returned if the varint represents a number too large for the target
@@ -136,7 +139,24 @@ pub unsafe fn decode_unsafe<T: VarIntTarget>(bytes: &[u8]) -> (T, u8) {
 
     // Mask out the irrelevant bits in each byte, such that the only bit that should remain on
     // in each byte is the bit from the bitmask that corresponds to the byte
-    let mask = _mm_set_epi8(128u8 as i8, 64, 32, 16, 8, 4, 2, 1, 128u8 as i8, 64, 32, 16, 8, 4, 2, 1);
+    let mask = _mm_set_epi8(
+        128u8 as i8,
+        64,
+        32,
+        16,
+        8,
+        4,
+        2,
+        1,
+        128u8 as i8,
+        64,
+        32,
+        16,
+        8,
+        4,
+        2,
+        1,
+    );
     let t = _mm_and_si128(shuffled, mask);
 
     // Expand out the set bits into full 0xFF values
@@ -148,7 +168,9 @@ pub unsafe fn decode_unsafe<T: VarIntTarget>(bytes: &[u8]) -> (T, u8) {
     // Turn off the most significant bits
     let msb_masked = _mm_and_si128(
         varint_part,
-        _mm_set_epi8(0, 0, 0, 0, 0, 0, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127),
+        _mm_set_epi8(
+            0, 0, 0, 0, 0, 0, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127,
+        ),
     );
 
     // Turn the vector into a scalar value by concatenating the 7-bit values
@@ -164,11 +186,14 @@ pub unsafe fn decode_unsafe<T: VarIntTarget>(bytes: &[u8]) -> (T, u8) {
 /// **Experimental.** Decodes three adjacent varints from the given pointer simultaneously.
 /// This currently runs much slower than a scalar or hybrid implementation. Requires AVX2 support.
 ///
+/// # Safety
 /// There must be at least 32 bytes of memory allocated after the beginning of the pointer.
 /// Otherwise, there may be undefined behavior.
 #[inline]
 #[cfg(target_feature = "avx2")]
-pub unsafe fn decode_three_unsafe<T: VarIntTarget, U: VarIntTarget, V: VarIntTarget>(bytes: &[u8]) -> (T, u8, U, u8, V, u8) {
+pub unsafe fn decode_three_unsafe<T: VarIntTarget, U: VarIntTarget, V: VarIntTarget>(
+    bytes: &[u8],
+) -> (T, u8, U, u8, V, u8) {
     let b = _mm256_loadu_si256(bytes.as_ptr() as *const __m256i);
 
     // Get the most significant bits
@@ -190,22 +215,35 @@ pub unsafe fn decode_three_unsafe<T: VarIntTarget, U: VarIntTarget, V: VarIntTar
     let first = _mm_and_si128(_mm256_extracti128_si256(b, 0), first_mask);
     // println!("{:?}", slice_m128i(first));
 
-    let msb_mask = _mm_set_epi8(0, 0, 0, 0, 0, 0, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127);
+    let msb_mask = _mm_set_epi8(
+        0, 0, 0, 0, 0, 0, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127,
+    );
     let first_msb = _mm_and_si128(msb_mask, first);
     let first_result = T::vector_to_num(std::mem::transmute(first_msb));
 
     // The second and third are much more tricky.
-    let shuf_gen = _mm256_setr_epi8(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
-                                    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);
+    let shuf_gen = _mm256_setr_epi8(
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
+        12, 13, 14, 15,
+    );
 
     // Rearrange each 128-bit lane such that ORing them together results in the window of data we want)
-    let shuf_add = _mm256_set_m128i(_mm_set1_epi8(-(16i8 - first_len as i8)), _mm_set1_epi8(first_len as i8));
+    let shuf_add = _mm256_set_m128i(
+        _mm_set1_epi8(-(16i8 - first_len as i8)),
+        _mm_set1_epi8(first_len as i8),
+    );
     let shuf_added = _mm256_add_epi8(shuf_gen, shuf_add);
-    let shuf = _mm256_or_si256(shuf_added, _mm256_cmpgt_epi8(shuf_added, _mm256_set1_epi8(15)));
+    let shuf = _mm256_or_si256(
+        shuf_added,
+        _mm256_cmpgt_epi8(shuf_added, _mm256_set1_epi8(15)),
+    );
     let shuffled = _mm256_shuffle_epi8(b, shuf);
 
     // OR the halves together, and now we have a view of the second varint
-    let second_shifted = _mm_or_si128(_mm256_extracti128_si256(shuffled, 0), _mm256_extracti128_si256(shuffled, 1));
+    let second_shifted = _mm_or_si128(
+        _mm256_extracti128_si256(shuffled, 0),
+        _mm256_extracti128_si256(shuffled, 1),
+    );
     let second_mask = _mm_cmplt_epi8(ascend, _mm_set1_epi8(second_len as i8));
     let second = _mm_and_si128(second_shifted, second_mask);
     // println!("second {:?}", slice_m128i(second));
@@ -215,12 +253,21 @@ pub unsafe fn decode_three_unsafe<T: VarIntTarget, U: VarIntTarget, V: VarIntTar
     let second_result = U::vector_to_num(std::mem::transmute(second_msb));
 
     // The third is done similarly
-    let shuf_add = _mm256_set_m128i(_mm_set1_epi8(-(16i8 - (first_len + second_len) as i8)), _mm_set1_epi8((first_len + second_len) as i8));
+    let shuf_add = _mm256_set_m128i(
+        _mm_set1_epi8(-(16i8 - (first_len + second_len) as i8)),
+        _mm_set1_epi8((first_len + second_len) as i8),
+    );
     let shuf_added = _mm256_add_epi8(shuf_gen, shuf_add);
-    let shuf = _mm256_or_si256(shuf_added, _mm256_cmpgt_epi8(shuf_added, _mm256_set1_epi8(15)));
+    let shuf = _mm256_or_si256(
+        shuf_added,
+        _mm256_cmpgt_epi8(shuf_added, _mm256_set1_epi8(15)),
+    );
     let shuffled = _mm256_shuffle_epi8(b, shuf);
 
-    let third_shifted = _mm_or_si128(_mm256_extracti128_si256(shuffled, 0), _mm256_extracti128_si256(shuffled, 1));
+    let third_shifted = _mm_or_si128(
+        _mm256_extracti128_si256(shuffled, 0),
+        _mm256_extracti128_si256(shuffled, 1),
+    );
     let third_mask = _mm_cmplt_epi8(ascend, _mm_set1_epi8(third_len as i8));
     let third = _mm_and_si128(third_mask, third_shifted);
     // println!("third {:?}", slice_m128i(third));
@@ -228,9 +275,14 @@ pub unsafe fn decode_three_unsafe<T: VarIntTarget, U: VarIntTarget, V: VarIntTar
     let third_msb = _mm_and_si128(msb_mask, third);
     let third_result = V::vector_to_num(std::mem::transmute(third_msb));
 
-    (first_result, first_len as u8,
-     second_result, second_len as u8,
-     third_result, third_len as u8)
+    (
+        first_result,
+        first_len as u8,
+        second_result,
+        second_len as u8,
+        third_result,
+        third_len as u8,
+    )
 }
 
 /// Encodes a single number to a varint. Requires SSE2 support.
@@ -283,6 +335,10 @@ pub fn encode_to_slice<T: VarIntTarget>(num: T, slice: &mut [u8]) -> u8 {
 ///
 /// Produces a tuple, with the encoded data followed by the number of bytes used to encode the
 /// varint.
+///
+/// # Safety
+/// This should not have any unsafe behavior with any input. However, it still calls a large number
+/// of unsafe functions.
 #[inline]
 pub unsafe fn encode_unsafe<T: VarIntTarget>(num: T) -> ([u8; 16], u8) {
     // Break the number into 7-bit parts and spread them out into a vector
@@ -297,7 +353,7 @@ pub unsafe fn encode_unsafe<T: VarIntTarget>(num: T) -> ([u8; 16], u8) {
 
     // Count the number of bytes used
     let bytes = 32 - bits.leading_zeros() as u8; // lzcnt on supported CPUs
-    // TODO: Compiler emits an unnecessary branch here when using bsr/bsl fallback
+                                                 // TODO: Compiler emits an unnecessary branch here when using bsr/bsl fallback
 
     // Fill that many bytes into a vector
     let ascend = _mm_setr_epi8(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);
@@ -315,7 +371,7 @@ pub unsafe fn encode_unsafe<T: VarIntTarget>(num: T) -> ([u8; 16], u8) {
 
 #[cfg(test)]
 mod tests {
-    use crate::{VarIntTarget, encode, decode};
+    use crate::{decode, encode, VarIntTarget};
 
     #[test]
     fn it_works() {
@@ -377,7 +433,6 @@ mod tests {
         check(2u32.pow(28) - 1, &[0xFF, 0xFF, 0xFF, 0x7F]);
         check(2u32.pow(28), &[0x80, 0x80, 0x80, 0x80, 0x01]);
     }
-
 
     #[test]
     fn roundtrip_u64() {
@@ -456,6 +511,7 @@ mod tests {
 
     #[test]
     fn overflow_u64() {
-        decode::<u8>(&[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x02]).expect_err("should overflow");
+        decode::<u8>(&[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x02])
+            .expect_err("should overflow");
     }
 }
