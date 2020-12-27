@@ -4,7 +4,8 @@ use core::arch::x86 as arch;
 #[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::*;
 use std::cmp::min;
-use crate::VarIntDecodeError::NotEnoughBytes;
+use std::error::Error;
+use std::fmt::Debug;
 
 // Functions to help with debugging
 fn slice_m128i(n: __m128i) -> [i8; 16] {
@@ -16,7 +17,7 @@ fn slice_m256i(n: __m256i) -> [i8; 32] {
 }
 
 /// Represents a scalar value that can be encoded to and decoded from a varint.
-pub trait VarIntTarget {
+pub trait VarIntTarget: Debug + Eq + PartialEq + Sized + Copy {
     /// The maximum length of varint that is necessary to represent this number
     const MAX_VARINT_BYTES: u8;
 
@@ -90,7 +91,7 @@ impl VarIntTarget for u32 {
 }
 
 impl VarIntTarget for u64 {
-    const MAX_VARINT_BYTES: u8 = 9;
+    const MAX_VARINT_BYTES: u8 = 10;
 
     #[inline(always)]
     fn vector_to_num(res: [u8; 16]) -> Self {
@@ -105,6 +106,7 @@ impl VarIntTarget for u64 {
             | ((res[6] as u64) << 6 * 7)
             | ((res[7] as u64) << 7 * 7)
             | ((res[8] as u64) << 8 * 7)
+            | ((res[9] as u64) << 9 * 7)
     }
 
     #[inline(always)]
@@ -119,6 +121,7 @@ impl VarIntTarget for u64 {
         res[6] = (self >> 6 * 7) as u8 & 127;
         res[7] = (self >> 7 * 7) as u8 & 127;
         res[8] = (self >> 8 * 7) as u8 & 127;
+        res[9] = (self >> 9 * 7) as u8 & 127;
 
         res
     }
@@ -130,7 +133,16 @@ pub enum VarIntDecodeError {
     NotEnoughBytes,
 }
 
-/// Decodes a single varint from the input slice. Requires SSSE3 support.
+impl std::fmt::Display for VarIntDecodeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Debug::fmt(self, f)
+    }
+}
+
+impl std::error::Error for VarIntDecodeError {}
+
+/// Decodes a single varint from the input slice. Requires SSSE3 support. For best performance,
+/// provide a slice at least 16 bytes in length, or use the unsafe version directly.
 #[inline]
 pub fn decode<T: VarIntTarget>(bytes: &[u8]) -> Result<(T, u8), VarIntDecodeError> {
     let result = if bytes.len() >= 16 {
@@ -310,14 +322,21 @@ pub unsafe fn encode_unsafe<T: VarIntTarget>(num: T) -> ([u8; 16], u8) {
     let stage1: __m128i = std::mem::transmute(num.num_to_vector_stage1());
 
     // Create a mask for where there exist values
-    let exists = _mm_cmpgt_epi8(stage1, _mm_setzero_si128());
+    // This signed comparison works because all MSBs should be cleared at this point
+    // Also handle the special case when num == 0
+    let minimum = _mm_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xffu8 as i8);
+    let exists = _mm_or_si128(_mm_cmpgt_epi8(stage1, _mm_setzero_si128()), minimum);
+    let bits = _mm_movemask_epi8(exists);
 
-    // Count the number of bytes set to 0xFF
-    let set = _mm_movemask_epi8(exists);
-    let bytes = set.count_ones() as u8; // popcnt on supported CPUs
+    // Count the number of bytes used
+    let bytes = 32 - bits.leading_zeros() as u8; // lzcnt on supported CPUs
+
+    // Fill that many bytes into a vector
+    let ascend = _mm_setr_epi8(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);
+    let mask = _mm_cmplt_epi8(ascend, _mm_set1_epi8(bytes as i8));
 
     // Shift it down 1 byte so the last MSB is the only one set, and make sure only the MSB is set
-    let shift = _mm_bsrli_si128(exists, 1);
+    let shift = _mm_bsrli_si128(mask, 1);
     let msbmask = _mm_and_si128(shift, _mm_set1_epi8(128u8 as i8));
 
     // Merge the MSB bits into the vector
@@ -328,40 +347,124 @@ pub unsafe fn encode_unsafe<T: VarIntTarget>(num: T) -> ([u8; 16], u8) {
 
 #[cfg(test)]
 mod tests {
-    use crate::{decode_unsafe, encode_unsafe, decode_three_unsafe};
+    use crate::{decode_unsafe, encode_unsafe, decode_three_unsafe, VarIntTarget, encode, decode};
 
     #[test]
     fn it_works() {
-        println!("{:?}", unsafe {
-            decode_unsafe::<u64>(&vec![
-                0xff, 0xff, 0xff, 0xff, 0xff, 0x0f, 0b10101100, 0b10101100, 0, 0, 0, 0b10101100, 0,
-                0, 0, 0, 1,
-            ])
-        });
-
-        println!("{:?}", unsafe {
-            decode_unsafe::<u64>(&vec![
-                0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff
-            ])
-        });
-
-        println!("{:?}", unsafe {
-            encode_unsafe::<u64>(549755813887)
-        });
-
         assert_eq!(2 + 2, 4);
     }
 
+    fn check<T: VarIntTarget>(value: T, mut encoded: &[u8]) {
+        let mut expected = [0u8; 16];
+        expected[..encoded.len()].copy_from_slice(encoded);
+
+        let a = encode(value);
+        assert_eq!(a.0, expected);
+        assert_eq!(a.1 as usize, encoded.len());
+
+        let roundtrip: (T, u8) = decode(&expected).unwrap();
+        assert_eq!(roundtrip.0, value);
+        assert_eq!(roundtrip.1 as usize, encoded.len());
+    }
+
+    // Test cases borrowed from prost
+
     #[test]
-    fn decode_three() {
-        println!("{:?}", unsafe {
-            decode_three_unsafe::<u64, u64, u64>(&vec![
-                248, 215, 255, 140, 238, 171, 187, 135, 64,
-                248, 215, 141, 140, 238, 171, 255, 135, 64,
-                248, 215, 141, 255, 238, 255, 187, 135, 64,
-                0xee, 0xee, 0xee, 0xee, 0xee, 0xee, 0xee, 0xee, 0xee, 0xee, 0xee, 0xee, 0xee, 0xee, 0xee, 0xee, 0xee,
-                0xee, 0xee, 0xee, 0xee
-            ])
-        })
+    fn roundtrip_u8() {
+        check(2u8.pow(0) - 1, &[0x00]);
+        check(2u8.pow(0), &[0x01]);
+
+        check(2u8.pow(7) - 1, &[0x7F]);
+        check(2u8.pow(7), &[0x80, 0x01]);
+    }
+
+    #[test]
+    fn roundtrip_u16() {
+        check(2u16.pow(0) - 1, &[0x00]);
+        check(2u16.pow(0), &[0x01]);
+
+        check(2u16.pow(7) - 1, &[0x7F]);
+        check(2u16.pow(7), &[0x80, 0x01]);
+        check(300u16, &[0xAC, 0x02]);
+
+        check(2u16.pow(14) - 1, &[0xFF, 0x7F]);
+        check(2u16.pow(14), &[0x80, 0x80, 0x01]);
+    }
+
+    #[test]
+    fn roundtrip_u32() {
+        check(2u32.pow(0) - 1, &[0x00]);
+        check(2u32.pow(0), &[0x01]);
+
+        check(2u32.pow(7) - 1, &[0x7F]);
+        check(2u32.pow(7), &[0x80, 0x01]);
+        check(300u32, &[0xAC, 0x02]);
+
+        check(2u32.pow(14) - 1, &[0xFF, 0x7F]);
+        check(2u32.pow(14), &[0x80, 0x80, 0x01]);
+
+        check(2u32.pow(21) - 1, &[0xFF, 0xFF, 0x7F]);
+        check(2u32.pow(21), &[0x80, 0x80, 0x80, 0x01]);
+
+        check(2u32.pow(28) - 1, &[0xFF, 0xFF, 0xFF, 0x7F]);
+        check(2u32.pow(28), &[0x80, 0x80, 0x80, 0x80, 0x01]);
+    }
+
+
+    #[test]
+    fn roundtrip_u64() {
+        check(2u64.pow(0) - 1, &[0x00]);
+        check(2u64.pow(0), &[0x01]);
+
+        check(2u64.pow(7) - 1, &[0x7F]);
+        check(2u64.pow(7), &[0x80, 0x01]);
+        check(300u64, &[0xAC, 0x02]);
+
+        check(2u64.pow(14) - 1, &[0xFF, 0x7F]);
+        check(2u64.pow(14), &[0x80, 0x80, 0x01]);
+
+        check(2u64.pow(21) - 1, &[0xFF, 0xFF, 0x7F]);
+        check(2u64.pow(21), &[0x80, 0x80, 0x80, 0x01]);
+
+        check(2u64.pow(28) - 1, &[0xFF, 0xFF, 0xFF, 0x7F]);
+        check(2u64.pow(28), &[0x80, 0x80, 0x80, 0x80, 0x01]);
+
+        check(2u64.pow(35) - 1, &[0xFF, 0xFF, 0xFF, 0xFF, 0x7F]);
+        check(2u64.pow(35), &[0x80, 0x80, 0x80, 0x80, 0x80, 0x01]);
+
+        check(2u64.pow(42) - 1, &[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x7F]);
+        check(2u64.pow(42), &[0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x01]);
+
+        check(
+            2u64.pow(49) - 1,
+            &[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x7F],
+        );
+        check(
+            2u64.pow(49),
+            &[0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x01],
+        );
+
+        check(
+            2u64.pow(56) - 1,
+            &[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x7F],
+        );
+        check(
+            2u64.pow(56),
+            &[0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x01],
+        );
+
+        check(
+            2u64.pow(63) - 1,
+            &[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x7F],
+        );
+        check(
+            2u64.pow(63),
+            &[0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x01],
+        );
+
+        check(
+            u64::MAX,
+            &[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x01],
+        );
     }
 }
