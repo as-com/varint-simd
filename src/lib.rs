@@ -1,6 +1,10 @@
+#[cfg(target_arch = "x86")]
+use core::arch::x86 as arch;
+
 #[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::*;
 
+// Functions to help with debugging
 fn slice_m128i(n: __m128i) -> [i8; 16] {
     unsafe { std::mem::transmute(n) }
 }
@@ -9,13 +13,21 @@ fn slice_m256i(n: __m256i) -> [i8; 32] {
     unsafe { std::mem::transmute(n) }
 }
 
+/// Represents a scalar value that can be encoded to and decoded from a varint.
 pub trait VarIntTarget {
+    /// The maximum length of varint that is necessary to represent this number
+    const MAX_VARINT_BYTES: u8;
+
+    /// Converts a 128-bit vector to this number
     fn vector_to_num(res: [u8; 16]) -> Self;
 
+    /// Splits this number into 7-bit segments for encoding
     fn num_to_vector_stage1(self) -> [u8; 16];
 }
 
 impl VarIntTarget for u8 {
+    const MAX_VARINT_BYTES: u8 = 2;
+
     #[inline(always)]
     fn vector_to_num(res: [u8; 16]) -> Self {
         (res[0] as u8) | ((res[1] as u8) << 7)
@@ -32,6 +44,8 @@ impl VarIntTarget for u8 {
 }
 
 impl VarIntTarget for u16 {
+    const MAX_VARINT_BYTES: u8 = 3;
+
     #[inline(always)]
     fn vector_to_num(res: [u8; 16]) -> Self {
         (res[0] as u16) | ((res[1] as u16) << 7) | ((res[2] as u16) << 2 * 7)
@@ -49,6 +63,8 @@ impl VarIntTarget for u16 {
 }
 
 impl VarIntTarget for u32 {
+    const MAX_VARINT_BYTES: u8 = 5;
+
     #[inline(always)]
     fn vector_to_num(res: [u8; 16]) -> Self {
         (res[0] as u32)
@@ -72,6 +88,8 @@ impl VarIntTarget for u32 {
 }
 
 impl VarIntTarget for u64 {
+    const MAX_VARINT_BYTES: u8 = 9;
+
     #[inline(always)]
     fn vector_to_num(res: [u8; 16]) -> Self {
         // This line should be auto-vectorized when compiling for AVX2-capable processors
@@ -104,8 +122,10 @@ impl VarIntTarget for u64 {
     }
 }
 
-/// There must be at least 16 bytes of allocated memory after the beginning of the pointer
-/// Requires SSSE3
+/// Decodes a single varint from the input slice. Requires SSSE3 support.
+///
+/// There must be at least 16 bytes of allocated memory after the beginning of the pointer.
+/// Otherwise, there may be undefined behavior. Any data after the end of the varint is ignored.
 #[inline]
 pub unsafe fn decode_unsafe<T: VarIntTarget>(bytes: &[u8]) -> (T, u8) {
     // It looks like you're trying to understand what this code does. You should probably read
@@ -158,8 +178,11 @@ pub unsafe fn decode_unsafe<T: VarIntTarget>(bytes: &[u8]) -> (T, u8) {
     (num, bytes_read)
 }
 
-/// There must be at least 32 bytes allocated after the beginning of the pointer
-/// TODO: Requires AVX2
+/// **Experimental.** Decodes three adjacent varints from the given pointer simultaneously.
+/// This currently runs much slower than a scalar or hybrid implementation. Requires AVX2 support.
+///
+/// There must be at least 32 bytes of memory allocated after the beginning of the pointer.
+/// Otherwise, there may be undefined behavior.
 #[inline]
 pub unsafe fn decode_three_unsafe<T: VarIntTarget, U: VarIntTarget, V: VarIntTarget>(bytes: &[u8]) -> (T, u8, U, u8, V, u8) {
     let b = _mm256_loadu_si256(bytes.as_ptr() as *const __m256i);
@@ -226,7 +249,8 @@ pub unsafe fn decode_three_unsafe<T: VarIntTarget, U: VarIntTarget, V: VarIntTar
      third_result, third_len as u8)
 }
 
-/// Requires SSSE3
+/// Encodes a single varint. Produces a tuple, with the encoded data followed by the number of
+/// bytes used to encode the varint.
 #[inline]
 pub unsafe fn encode_unsafe<T: VarIntTarget>(num: T) -> ([u8; 16], u8) {
     // Break the number into 7-bit parts and spread them out into a vector
