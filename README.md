@@ -35,7 +35,7 @@ fn main() {
   // )
   assert_eq!(decoded.0, num);
   
-  // Signed integers can be encoded/decoded with the convenience functions encode_zigzag and decode_zigzag
+  // Signed integers can be encoded/decoded with convenience functions encode_zigzag and decode_zigzag
   let num: i32 = -20;
   let encoded = encode_zigzag::<i32>(num);
   let decoded = decode_zigzag::<i32>(&encoded.0).unwrap();
