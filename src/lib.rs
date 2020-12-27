@@ -4,7 +4,6 @@ use core::arch::x86 as arch;
 #[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::*;
 use std::cmp::min;
-use std::error::Error;
 use std::fmt::Debug;
 
 // Functions to help with debugging
@@ -347,14 +346,14 @@ pub unsafe fn encode_unsafe<T: VarIntTarget>(num: T) -> ([u8; 16], u8) {
 
 #[cfg(test)]
 mod tests {
-    use crate::{decode_unsafe, encode_unsafe, decode_three_unsafe, VarIntTarget, encode, decode};
+    use crate::{VarIntTarget, encode, decode};
 
     #[test]
     fn it_works() {
         assert_eq!(2 + 2, 4);
     }
 
-    fn check<T: VarIntTarget>(value: T, mut encoded: &[u8]) {
+    fn check<T: VarIntTarget>(value: T, encoded: &[u8]) {
         let mut expected = [0u8; 16];
         expected[..encoded.len()].copy_from_slice(encoded);
 
