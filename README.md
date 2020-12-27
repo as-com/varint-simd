@@ -59,7 +59,7 @@ integer size. For more details, please see [the source code for these benchmarks
 
 ### Intel Core i7-8850H "Coffee Lake" (2018 15" MacBook Pro)
 
-![benchmark graph](benchmark.png)
+![benchmark graph](images/benchmark.png)
 
 #### Decode
 |   | varint-simd unsafe | varint-simd safe | integer-encoding-rs | prost |
