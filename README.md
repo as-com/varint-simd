@@ -1,17 +1,18 @@
 varint-simd
 ==
 
-Very fast SIMD-accelerated [variable-length integer](https://developers.google.com/protocol-buffers/docs/encoding) encoder and decoder 
-written in Rust. 
+varint-simd is a fast SIMD-accelerated [variable-length integer](https://developers.google.com/protocol-buffers/docs/encoding) 
+encoder and decoder written in Rust. It is intended for use in implementations of Protocol Buffers (protobuf), Apache
+Avro, and similar serialization formats.
 
-Currently targets x86_64 processors with support for SSSE3 (Intel Core/AMD Bulldozer or newer), with 
-optional optimizations for processors supporting POPCNT and LZCNT, and limited auto-vectorization
-for processors supporting AVX2. 
+This library currently targets x86_64 processors with support for SSSE3 (Intel Core/AMD Bulldozer or newer), with 
+optional optimizations for processors supporting POPCNT and LZCNT, and limited auto-vectorization for processors 
+supporting AVX2. 
 
 ## Usage
 **Important:** For optimal performance, ensure the Rust compiler has an appropriate `target-cpu` setting. An example is
-provided in [`.cargo/config`](.cargo/config), but you may need to edit the file to specify the oldest CPUs your binaries
-will support.
+provided in [`.cargo/config`](.cargo/config), but you may need to edit the file to specify the oldest CPUs your compiled
+binaries will support.
 
 ```rust
 use varint_simd::{encode, decode};
@@ -43,7 +44,8 @@ There is also an optional "unsafe" interface for bypassing overflow and bounds c
 your input data won't cause undefined behavior and your calling code can tolerate truncated numbers.
 
 ## Benchmarks
-[Source code for benchmarks](benches/varint_bench.rs)
+The benchmarks below reflect the performance of decoding and encoding a sequence of random integers bounded by each 
+integer size. For more details, please see [the source code for these benchmarks](benches/varint_bench.rs)
 
 ### Intel Core i7-8850H "Coffee Lake" (2018 15" MacBook Pro)
 

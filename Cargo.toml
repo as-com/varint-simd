@@ -7,7 +7,7 @@ license = "MIT OR Apache-2.0"
 description = "SIMD-accelerated varint encoder and decoder"
 repository = "https://github.com/as-com/varint-simd"
 readme = "https://github.com/as-com/varint-simd#readme"
-keywords = ["varint", "simd"]
+keywords = ["varint", "simd", "protobuf", "serialization"]
 categories = ["encoding", "parser-implementations"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
