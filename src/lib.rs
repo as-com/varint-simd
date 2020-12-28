@@ -84,9 +84,6 @@ pub fn decode<T: VarIntTarget>(bytes: &[u8]) -> Result<(T, u8), VarIntDecodeErro
 /// Convenience function for decoding a single varint in ZigZag format from the input slice.
 /// See also: [`decode`]
 ///
-/// Note: the type parameter should be the number type's unsigned counterpart. The return value will
-/// still be signed.
-///
 /// # Examples
 /// ```
 /// use varint_simd::{decode_zigzag, VarIntDecodeError};
