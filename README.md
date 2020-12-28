@@ -69,7 +69,7 @@ For more details, please see [the source code for these benchmarks](benches/vari
 ![benchmark graph](images/benchmark.png)
 
 #### Decode
-|   | varint-simd unsafe | varint-simd safe | rustc | integer-encoding-rs | prost |
+|   | varint-simd unsafe | varint-simd safe | [rustc](https://github.com/nnethercote/rust/blob/0f6f2d681b39c5f95459cd09cb936b6ceb27cd82/compiler/rustc_serialize/src/leb128.rs) | [integer-encoding-rs](https://github.com/dermesser/integer-encoding-rs) | [prost](https://github.com/danburkert/prost) |
 | -- | -- | -- | -- | -- | -- |
 | `u8`  | **1.85 ns** | **2.80 ns** | 7.23 ns | 7.18 ns | 70.6 ns |
 | `u16` | **1.95 ns** | **2.78 ns** | 5.54 ns | 7.17 ns | 71.5 ns |
