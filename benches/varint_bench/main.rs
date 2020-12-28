@@ -1,10 +1,11 @@
-use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
+use criterion::{criterion_group, criterion_main, BatchSize, Criterion, Throughput};
 use integer_encoding::VarInt;
 use rand::distributions::{Distribution, Standard};
 use rand::prelude::ThreadRng;
 use rand::{thread_rng, Rng};
 use varint_simd::{decode, decode_three_unsafe, decode_unsafe, encode};
 
+mod leb128;
 mod prost_varint;
 
 fn create_encoded_generator<T: VarInt, R: Rng>(rng: &mut R) -> impl FnMut() -> [u8; 16] + '_
@@ -33,10 +34,19 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     let mut rng = thread_rng();
 
     let mut group = c.benchmark_group("varint-u8/decode");
+    group.throughput(Throughput::Elements(1));
     group.bench_function("integer-encoding", |b| {
         b.iter_batched(
             create_encoded_generator::<u8, _>(&mut rng),
             |encoded| u8::decode_var(&encoded).unwrap().0,
+            BatchSize::SmallInput,
+        )
+    });
+
+    group.bench_function("rustc", |b| {
+        b.iter_batched(
+            create_encoded_generator::<u8, _>(&mut rng),
+            |encoded| leb128::read_u16_leb128(&encoded).0,
             BatchSize::SmallInput,
         )
     });
@@ -67,6 +77,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     group.finish();
 
     let mut group = c.benchmark_group("varint-u8/encode");
+    group.throughput(Throughput::Elements(1));
     group.bench_function("integer-encoding", |b| {
         b.iter_batched(
             || rng.gen::<u8>(),
@@ -78,11 +89,24 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         )
     });
 
+    let mut target = Vec::with_capacity(16);
+    group.bench_function("rustc", |b| {
+        b.iter_batched(
+            || rng.gen::<u8>(),
+            |num| {
+                target.clear();
+                leb128::write_u16_leb128(&mut target, num as u16);
+            },
+            BatchSize::SmallInput,
+        )
+    });
+
+    let mut target = Vec::with_capacity(16);
     group.bench_function("prost-varint", |b| {
         b.iter_batched(
             || rng.gen::<u8>(),
             |num| {
-                let mut target = Vec::with_capacity(16);
+                target.clear();
                 prost_varint::encode_varint(num as u64, &mut target)
             },
             BatchSize::SmallInput,
@@ -95,10 +119,19 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     group.finish();
 
     let mut group = c.benchmark_group("varint-u16/decode");
+    group.throughput(Throughput::Elements(1));
     group.bench_function("integer-encoding", |b| {
         b.iter_batched(
             create_encoded_generator::<u16, _>(&mut rng),
             |encoded| u16::decode_var(&encoded).unwrap().0,
+            BatchSize::SmallInput,
+        )
+    });
+
+    group.bench_function("rustc", |b| {
+        b.iter_batched(
+            create_encoded_generator::<u16, _>(&mut rng),
+            |encoded| leb128::read_u16_leb128(&encoded).0,
             BatchSize::SmallInput,
         )
     });
@@ -130,6 +163,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     group.finish();
 
     let mut group = c.benchmark_group("varint-u16/encode");
+    group.throughput(Throughput::Elements(1));
     group.bench_function("integer-encoding", |b| {
         b.iter_batched(
             || rng.gen::<u16>(),
@@ -141,11 +175,24 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         )
     });
 
+    let mut target = Vec::with_capacity(16);
+    group.bench_function("rustc", |b| {
+        b.iter_batched(
+            || rng.gen::<u16>(),
+            |num| {
+                target.clear();
+                leb128::write_u16_leb128(&mut target, num);
+            },
+            BatchSize::SmallInput,
+        )
+    });
+
+    let mut target = Vec::with_capacity(16);
     group.bench_function("prost-varint", |b| {
         b.iter_batched(
             || rng.gen::<u16>(),
             |num| {
-                let mut target = Vec::with_capacity(16);
+                target.clear();
                 prost_varint::encode_varint(num as u64, &mut target)
             },
             BatchSize::SmallInput,
@@ -162,10 +209,19 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     group.finish();
 
     let mut group = c.benchmark_group("varint-u32/decode");
+    group.throughput(Throughput::Elements(1));
     group.bench_function("integer-encoding", |b| {
         b.iter_batched(
             create_encoded_generator::<u32, _>(&mut rng),
             |encoded| u32::decode_var(&encoded).unwrap().0,
+            BatchSize::SmallInput,
+        )
+    });
+
+    group.bench_function("rustc", |b| {
+        b.iter_batched(
+            create_encoded_generator::<u32, _>(&mut rng),
+            |encoded| leb128::read_u32_leb128(&encoded).0,
             BatchSize::SmallInput,
         )
     });
@@ -196,6 +252,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     group.finish();
 
     let mut group = c.benchmark_group("varint-u32/encode");
+    group.throughput(Throughput::Elements(1));
     group.bench_function("integer-encoding", |b| {
         b.iter_batched(
             || rng.gen::<u32>(),
@@ -207,11 +264,24 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         )
     });
 
+    let mut target = Vec::with_capacity(16);
+    group.bench_function("rustc", |b| {
+        b.iter_batched(
+            || rng.gen::<u32>(),
+            |num| {
+                target.clear();
+                leb128::write_u32_leb128(&mut target, num);
+            },
+            BatchSize::SmallInput,
+        )
+    });
+
+    let mut target = Vec::with_capacity(16);
     group.bench_function("prost-varint", |b| {
         b.iter_batched(
             || rng.gen::<u32>(),
             |num| {
-                let mut target = Vec::with_capacity(16);
+                target.clear();
                 prost_varint::encode_varint(num as u64, &mut target)
             },
             BatchSize::SmallInput,
@@ -228,10 +298,19 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     group.finish();
 
     let mut group = c.benchmark_group("varint-u64/decode");
+    group.throughput(Throughput::Elements(1));
     group.bench_function("integer-encoding", |b| {
         b.iter_batched(
             create_encoded_generator::<u64, _>(&mut rng),
             |encoded| u64::decode_var(&encoded).unwrap().0,
+            BatchSize::SmallInput,
+        )
+    });
+
+    group.bench_function("rustc", |b| {
+        b.iter_batched(
+            create_encoded_generator::<u64, _>(&mut rng),
+            |encoded| leb128::read_u64_leb128(&encoded).0,
             BatchSize::SmallInput,
         )
     });
@@ -263,6 +342,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     group.finish();
 
     let mut group = c.benchmark_group("varint-u64/encode");
+    group.throughput(Throughput::Elements(1));
     group.bench_function("integer-encoding", |b| {
         b.iter_batched(
             || rng.gen::<u64>(),
@@ -274,11 +354,24 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         )
     });
 
+    let mut target = Vec::with_capacity(16);
+    group.bench_function("rustc", |b| {
+        b.iter_batched(
+            || rng.gen::<u64>(),
+            |num| {
+                target.clear();
+                leb128::write_u64_leb128(&mut target, num);
+            },
+            BatchSize::SmallInput,
+        )
+    });
+
+    let mut target = Vec::with_capacity(16);
     group.bench_function("prost-varint", |b| {
         b.iter_batched(
             || rng.gen::<u64>(),
             |num| {
-                let mut target = Vec::with_capacity(16);
+                target.clear();
                 prost_varint::encode_varint(num as u64, &mut target)
             },
             BatchSize::SmallInput,
