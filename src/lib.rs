@@ -174,8 +174,7 @@ pub unsafe fn decode_unsafe<T: VarIntTarget>(bytes: &[u8]) -> (T, u8) {
     );
 
     // Turn the vector into a scalar value by concatenating the 7-bit values
-    let res: [u8; 16] = std::mem::transmute(msb_masked);
-    let num = T::vector_to_num(res); // specialized functions for different number sizes
+    let num = T::vector_to_num(std::mem::transmute(msb_masked)); // specialized functions for different number sizes
 
     // Count the number of bytes we actually read
     let bytes_read = cleaned.count_ones() as u8; // popcnt on supported CPUs
