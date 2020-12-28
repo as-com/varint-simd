@@ -16,6 +16,12 @@ exclude = ["/.idea", "/images", "/.github"]
 
 [dependencies]
 
+[features]
+native-optimizations = []
+
+# Please do not enable this feature
+dangerously-force-enable-pdep-since-i-really-know-what-im-doing = []
+
 [dev-dependencies]
 criterion = "0.3"
 integer-encoding = "2.1"

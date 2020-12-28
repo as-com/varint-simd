@@ -35,6 +35,18 @@ impl VarIntTarget for u8 {
     const MAX_LAST_VARINT_BYTE: u8 = 0b00000001;
 
     #[inline(always)]
+    #[cfg(all(target_arch = "x86_64", target_feature = "bmi2", fast_pdep))]
+    fn vector_to_num(res: [u8; 16]) -> Self {
+        use std::arch::x86_64::_pext_u64;
+
+        let arr: [u64; 2] = unsafe { std::mem::transmute(res) };
+        let x = arr[0];
+
+        unsafe { _pext_u64(x, 0x000000000000017f) as u8 }
+    }
+
+    #[inline(always)]
+    #[cfg(not(all(target_arch = "x86_64", target_feature = "bmi2", fast_pdep)))]
     fn vector_to_num(res: [u8; 16]) -> Self {
         let res: [u64; 2] = unsafe { std::mem::transmute(res) };
         let x = res[0];
@@ -42,6 +54,20 @@ impl VarIntTarget for u8 {
     }
 
     #[inline(always)]
+    #[cfg(all(target_arch = "x86_64", target_feature = "bmi2", fast_pdep))]
+    fn num_to_vector_stage1(self) -> [u8; 16] {
+        use std::arch::x86_64::_pdep_u64;
+
+        let mut res = [0u64; 2];
+        let x = self as u64;
+
+        res[0] = unsafe { _pdep_u64(x, 0x000000000000017f) };
+
+        unsafe { std::mem::transmute(res) }
+    }
+
+    #[inline(always)]
+    #[cfg(not(all(target_arch = "x86_64", target_feature = "bmi2", fast_pdep)))]
     fn num_to_vector_stage1(self) -> [u8; 16] {
         let mut res = [0u64; 2];
         let x = self as u64;
@@ -68,6 +94,18 @@ impl VarIntTarget for u16 {
     const MAX_LAST_VARINT_BYTE: u8 = 0b00000011;
 
     #[inline(always)]
+    #[cfg(all(target_arch = "x86_64", target_feature = "bmi2", fast_pdep))]
+    fn vector_to_num(res: [u8; 16]) -> Self {
+        use std::arch::x86_64::_pext_u64;
+
+        let arr: [u64; 2] = unsafe { std::mem::transmute(res) };
+        let x = arr[0];
+
+        unsafe { _pext_u64(x, 0x0000000000037f7f) as u16 }
+    }
+
+    #[inline(always)]
+    #[cfg(not(all(target_arch = "x86_64", target_feature = "bmi2", fast_pdep)))]
     fn vector_to_num(res: [u8; 16]) -> Self {
         let arr: [u64; 2] = unsafe { std::mem::transmute(res) };
         let x = arr[0];
@@ -78,6 +116,20 @@ impl VarIntTarget for u16 {
     }
 
     #[inline(always)]
+    #[cfg(all(target_arch = "x86_64", target_feature = "bmi2", fast_pdep))]
+    fn num_to_vector_stage1(self) -> [u8; 16] {
+        use std::arch::x86_64::_pdep_u64;
+
+        let mut res = [0u64; 2];
+        let x = self as u64;
+
+        res[0] = unsafe { _pdep_u64(x, 0x0000000000037f7f) };
+
+        unsafe { std::mem::transmute(res) }
+    }
+
+    #[inline(always)]
+    #[cfg(not(all(target_arch = "x86_64", target_feature = "bmi2", fast_pdep)))]
     fn num_to_vector_stage1(self) -> [u8; 16] {
         let mut res = [0u64; 2];
         let x = self as u64;
@@ -105,6 +157,18 @@ impl VarIntTarget for u32 {
     const MAX_LAST_VARINT_BYTE: u8 = 0b00001111;
 
     #[inline(always)]
+    #[cfg(all(target_arch = "x86_64", target_feature = "bmi2", fast_pdep))]
+    fn vector_to_num(res: [u8; 16]) -> Self {
+        use std::arch::x86_64::_pext_u64;
+
+        let arr: [u64; 2] = unsafe { std::mem::transmute(res) };
+        let x = arr[0];
+
+        unsafe { _pext_u64(x, 0x0000000f7f7f7f7f) as u32 }
+    }
+
+    #[inline(always)]
+    #[cfg(not(all(target_arch = "x86_64", target_feature = "bmi2", fast_pdep)))]
     fn vector_to_num(res: [u8; 16]) -> Self {
         let arr: [u64; 2] = unsafe { std::mem::transmute(res) };
         let x = arr[0];
@@ -117,6 +181,20 @@ impl VarIntTarget for u32 {
     }
 
     #[inline(always)]
+    #[cfg(all(target_arch = "x86_64", target_feature = "bmi2", fast_pdep))]
+    fn num_to_vector_stage1(self) -> [u8; 16] {
+        use std::arch::x86_64::_pdep_u64;
+
+        let mut res = [0u64; 2];
+        let x = self as u64;
+
+        res[0] = unsafe { _pdep_u64(x, 0x0000000f7f7f7f7f) };
+
+        unsafe { std::mem::transmute(res) }
+    }
+
+    #[inline(always)]
+    #[cfg(not(all(target_arch = "x86_64", target_feature = "bmi2", fast_pdep)))]
     fn num_to_vector_stage1(self) -> [u8; 16] {
         let mut res = [0u64; 2];
         let x = self as u64;
@@ -145,22 +223,24 @@ impl VarIntTarget for u64 {
     const MAX_VARINT_BYTES: u8 = 10;
     const MAX_LAST_VARINT_BYTE: u8 = 0b00000001;
 
-    // #[inline(always)]
-    // #[cfg(target_feature = "bmi2")]
-    // fn vector_to_num(res: __m128i) -> Self {
-    //     let arr: [u64; 2] = unsafe { std::mem::transmute(res) };
-    //
-    //     let x = arr[0];
-    //     let y = arr[1];
-    //
-    //     let res = unsafe { _pext_u64(x, 0x7f7f7f7f7f7f7f7f) }
-    //         | ((y & 0x0000000000000100) << 55)
-    //         | ((y & 0x000000000000007f) << 56);
-    //
-    //     return res;
-    // }
+    #[inline(always)]
+    #[cfg(all(target_arch = "x86_64", target_feature = "bmi2", fast_pdep))]
+    fn vector_to_num(res: [u8; 16]) -> Self {
+        use std::arch::x86_64::_pext_u64;
+
+        let arr: [u64; 2] = unsafe { std::mem::transmute(res) };
+
+        let x = arr[0];
+        let y = arr[1];
+
+        let res = unsafe { _pext_u64(x, 0x7f7f7f7f7f7f7f7f) }
+            | (unsafe { _pext_u64(y, 0x000000000000017f) } << 56);
+
+        res
+    }
 
     #[inline(always)]
+    #[cfg(not(all(target_arch = "x86_64", target_feature = "bmi2", fast_pdep)))]
     fn vector_to_num(res: [u8; 16]) -> Self {
         // TODO: Find out a way to vectorize this
 
@@ -184,6 +264,21 @@ impl VarIntTarget for u64 {
     }
 
     #[inline(always)]
+    #[cfg(all(target_arch = "x86_64", target_feature = "bmi2", fast_pdep))]
+    fn num_to_vector_stage1(self) -> [u8; 16] {
+        use std::arch::x86_64::_pdep_u64;
+
+        let mut res = [0u64; 2];
+        let x = self;
+
+        res[0] = unsafe { _pdep_u64(x, 0x7f7f7f7f7f7f7f7f) };
+        res[1] = unsafe { _pdep_u64(x >> 56, 0x000000000000017f) };
+
+        unsafe { std::mem::transmute(res) }
+    }
+
+    #[inline(always)]
+    #[cfg(not(all(target_arch = "x86_64", target_feature = "bmi2", fast_pdep)))]
     fn num_to_vector_stage1(self) -> [u8; 16] {
         let mut res = [0u64; 2];
         let x = self;
