@@ -1,6 +1,6 @@
 [package]
 name = "varint-simd"
-version = "0.2.1"
+version = "0.2.2-alpha.0"
 authors = ["Andrew Sun <me@andrewsun.com>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
