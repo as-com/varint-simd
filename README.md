@@ -70,7 +70,7 @@ For more details, please see [the source code for these benchmarks](benches/vari
 
 #### Decode
 |   | varint-simd unsafe | varint-simd safe | rustc | integer-encoding-rs | prost |
-| -- | -- | -- | -- | -- |
+| -- | -- | -- | -- | -- | -- |
 | `u8`  | **1.85 ns** | **2.80 ns** | 7.23 ns | 7.18 ns | 70.6 ns |
 | `u16` | **1.95 ns** | **2.78 ns** | 5.54 ns | 7.17 ns | 71.5 ns |
 | `u32` | **2.41 ns** | **3.27 ns** | 7.35 ns | 7.41 ns | 73.6 ns |
