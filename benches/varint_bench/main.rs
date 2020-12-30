@@ -3,7 +3,7 @@ use integer_encoding::VarInt;
 use rand::distributions::{Distribution, Standard};
 use rand::prelude::ThreadRng;
 use rand::{thread_rng, Rng};
-use varint_simd::{decode, decode_three_unsafe, decode_unsafe, encode, decode_two_unsafe, decode_two_v2, decode_two_wide_unsafe};
+use varint_simd::{decode, decode_three_unsafe, decode_unsafe, encode, decode_two_unsafe, decode_two_wide_unsafe};
 
 mod leb128;
 mod prost_varint;
@@ -279,15 +279,6 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             create_double_encoded_generator::<u32, u32, _>(&mut rng),
             |encoded| unsafe {
                 decode_two_unsafe::<u32, u32>(encoded.as_ptr())
-            },
-            BatchSize::SmallInput,
-        )
-    });
-    group.bench_function("varint-simd/2x/unsafeold", |b| {
-        b.iter_batched_ref(
-            create_double_encoded_generator::<u32, u32, _>(&mut rng),
-            |encoded| unsafe {
-                decode_two_v2::<u32, u32>(encoded.as_ptr())
             },
             BatchSize::SmallInput,
         )
