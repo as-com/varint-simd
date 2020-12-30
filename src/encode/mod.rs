@@ -1,10 +1,9 @@
-use crate::num::{SignedVarIntTarget, VarIntTarget};
-
 #[cfg(target_arch = "x86")]
 use std::arch::x86::*;
-
 #[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::*;
+
+use crate::num::{SignedVarIntTarget, VarIntTarget};
 
 /// Encodes a single number to a varint. Requires SSE2 support.
 ///

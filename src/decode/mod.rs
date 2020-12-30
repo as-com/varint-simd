@@ -1,12 +1,13 @@
-use crate::num::{SignedVarIntTarget, VarIntTarget};
-use crate::VarIntDecodeError;
-use std::cmp::min;
-
 #[cfg(target_arch = "x86")]
 use std::arch::x86::*;
-
 #[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::*;
+use std::cmp::min;
+
+use crate::num::{SignedVarIntTarget, VarIntTarget};
+use crate::VarIntDecodeError;
+
+mod lookup;
 
 /// Decodes a single varint from the input slice. Requires SSSE3 support.
 ///
