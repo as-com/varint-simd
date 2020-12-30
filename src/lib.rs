@@ -20,7 +20,6 @@ pub mod num;
 
 use crate::num::SignedVarIntTarget;
 use num::VarIntTarget;
-use std::mem::MaybeUninit;
 
 // Functions to help with debugging
 #[allow(dead_code)]
@@ -111,7 +110,7 @@ pub fn decode_zigzag<T: SignedVarIntTarget>(bytes: &[u8]) -> Result<(T, u8), Var
 ///
 /// # Safety
 /// There must be at least 16 bytes of allocated memory after the beginning of the pointer.
-/// Otherwise, there may be undefined behavior. Any data after the end of the varint is ignored.
+/// Otherwise, there may be undefined behavior. Any data after the end of the varint are ignored.
 /// A truncated value will be returned if the varint represents a number too large for the target
 /// type.
 ///
@@ -153,6 +152,19 @@ pub unsafe fn decode_unsafe<T: VarIntTarget>(bytes: *const u8) -> (T, u8) {
     (num, len as u8)
 }
 
+/// Decodes two varints simultaneously. Target types must fit within 16 bytes when varint encoded.
+/// Requires SSSE3 support.
+///
+/// For example, it is permissible to decode `u32` and `u32`, and `u64` and `u32`, but it is not
+/// possible to decode two `u64` values with this function simultaneously.
+///
+/// # Safety
+/// There must be at least 16 bytes of allocated memory after the start of the pointer. Otherwise,
+/// there may be undefined behavior. Any data after the two varints are ignored. Truncated values
+/// will be returned if a varint exceeds the target type's limit.
+#[inline]
+#[cfg(any(target_feature = "ssse3", doc))]
+#[cfg_attr(rustc_nightly, doc(cfg(target_feature = "ssse3")))]
 pub unsafe fn decode_two_unsafe<T: VarIntTarget, U: VarIntTarget>(
     bytes: *const u8,
 ) -> (T, u8, U, u8) {
@@ -259,8 +271,10 @@ pub unsafe fn decode_two_unsafe<T: VarIntTarget, U: VarIntTarget>(
             )
         };
 
-        first_num = T::cast_u32(_mm_extract_epi32(x, 0) as u32);
-        second_num = U::cast_u32(_mm_extract_epi32(x, 2) as u32);
+        let x: [u32; 4] = std::mem::transmute(x);
+        // _mm_extract_epi32 requires SSE4.1
+        first_num = T::cast_u32(x[0]);
+        second_num = U::cast_u32(x[2]);
     } else {
         first_num = T::vector_to_num(std::mem::transmute(first));
         second_num = U::vector_to_num(std::mem::transmute(second));
@@ -270,7 +284,8 @@ pub unsafe fn decode_two_unsafe<T: VarIntTarget, U: VarIntTarget>(
 }
 
 /// Decode two adjacent varints simultaneously from the input pointer. Requires AVX2. Calling code
-/// should ensure that AVX2 is supported before calling this function.
+/// should ensure that AVX2 is supported before calling this function. Allows for decoding a pair
+/// of `u64` values.
 ///
 /// # Safety
 /// There must be at least 32 bytes of allocated memory after the beginning of the pointer.
