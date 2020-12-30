@@ -1,9 +1,11 @@
-use criterion::{criterion_group, criterion_main, BatchSize, Criterion, Throughput, black_box};
+use criterion::{black_box, criterion_group, criterion_main, BatchSize, Criterion, Throughput};
 use integer_encoding::VarInt;
 use rand::distributions::{Distribution, Standard};
 use rand::prelude::ThreadRng;
 use rand::{thread_rng, Rng};
-use varint_simd::{decode, decode_three_unsafe, decode_unsafe, encode, decode_two_unsafe, decode_two_wide_unsafe};
+use varint_simd::{
+    decode, decode_three_unsafe, decode_two_unsafe, decode_two_wide_unsafe, decode_unsafe, encode,
+};
 
 mod leb128;
 mod prost_varint;
@@ -19,9 +21,12 @@ where
     }
 }
 
-fn create_double_encoded_generator<T: VarInt, U: VarInt, R: Rng>(rng: &mut R) -> impl FnMut() -> [u8; 16] + '_
-    where
-        Standard: Distribution<T>, Standard: Distribution<U>
+fn create_double_encoded_generator<T: VarInt, U: VarInt, R: Rng>(
+    rng: &mut R,
+) -> impl FnMut() -> [u8; 16] + '_
+where
+    Standard: Distribution<T>,
+    Standard: Distribution<U>,
 {
     move || {
         let mut encoded = [0; 16];
@@ -31,9 +36,12 @@ fn create_double_encoded_generator<T: VarInt, U: VarInt, R: Rng>(rng: &mut R) ->
     }
 }
 
-fn create_double_encoded_generator_wide<T: VarInt, U: VarInt, R: Rng>(rng: &mut R) -> impl FnMut() -> [u8; 32] + '_
-    where
-        Standard: Distribution<T>, Standard: Distribution<U>
+fn create_double_encoded_generator_wide<T: VarInt, U: VarInt, R: Rng>(
+    rng: &mut R,
+) -> impl FnMut() -> [u8; 32] + '_
+where
+    Standard: Distribution<T>,
+    Standard: Distribution<U>,
 {
     move || {
         let mut encoded = [0; 32];
@@ -277,9 +285,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     group.bench_function("varint-simd/2x/unsafe", |b| {
         b.iter_batched_ref(
             create_double_encoded_generator::<u32, u32, _>(&mut rng),
-            |encoded| unsafe {
-                decode_two_unsafe::<u32, u32>(encoded.as_ptr())
-            },
+            |encoded| unsafe { decode_two_unsafe::<u32, u32>(encoded.as_ptr()) },
             BatchSize::SmallInput,
         )
     });

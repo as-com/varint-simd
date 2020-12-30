@@ -79,7 +79,7 @@ pub fn decode<T: VarIntTarget>(bytes: &[u8]) -> Result<(T, u8), VarIntDecodeErro
 
     if result.1 > T::MAX_VARINT_BYTES
         || result.1 == T::MAX_VARINT_BYTES
-        && bytes[(T::MAX_VARINT_BYTES - 1) as usize] > T::MAX_LAST_VARINT_BYTE
+            && bytes[(T::MAX_VARINT_BYTES - 1) as usize] > T::MAX_LAST_VARINT_BYTE
     {
         Err(VarIntDecodeError::Overflow)
     } else {
@@ -153,11 +153,17 @@ pub unsafe fn decode_unsafe<T: VarIntTarget>(bytes: *const u8) -> (T, u8) {
     (num, len as u8)
 }
 
-pub unsafe fn decode_two_unsafe<T: VarIntTarget, U: VarIntTarget>(bytes: *const u8) -> (T, u8, U, u8) {
+pub unsafe fn decode_two_unsafe<T: VarIntTarget, U: VarIntTarget>(
+    bytes: *const u8,
+) -> (T, u8, U, u8) {
     if T::MAX_VARINT_BYTES + U::MAX_VARINT_BYTES > 16 {
         // check will be eliminated at compile time
-        panic!("exceeded length limit: cannot decode {} and {}, total length {} exceeds 16 bytes",
-               std::any::type_name::<T>(), std::any::type_name::<U>(), T::MAX_VARINT_BYTES + U::MAX_VARINT_BYTES);
+        panic!(
+            "exceeded length limit: cannot decode {} and {}, total length {} exceeds 16 bytes",
+            std::any::type_name::<T>(),
+            std::any::type_name::<U>(),
+            T::MAX_VARINT_BYTES + U::MAX_VARINT_BYTES
+        );
     }
 
     let b = _mm_loadu_si128(bytes as *const __m128i);
@@ -186,36 +192,69 @@ pub unsafe fn decode_two_unsafe<T: VarIntTarget, U: VarIntTarget>(bytes: *const 
     let second_num;
 
     // Only use "turbo" mode if the numbers fit in 64-bit lanes and we aren't able to use PDEP/PEXT
-    let should_turbo = T::MAX_VARINT_BYTES <= 8 && U::MAX_VARINT_BYTES <= 8
-        && cfg!(not(all(target_arch = "x86_64", target_feature = "bmi2", fast_pdep)));
-    if should_turbo { // const, so optimized out
+    let should_turbo = T::MAX_VARINT_BYTES <= 8
+        && U::MAX_VARINT_BYTES <= 8
+        && cfg!(not(all(
+            target_arch = "x86_64",
+            target_feature = "bmi2",
+            fast_pdep
+        )));
+    if should_turbo {
+        // const, so optimized out
         let comb = _mm_or_si128(first, _mm_bslli_si128(second, 8));
 
         let x = if T::MAX_VARINT_BYTES <= 2 && U::MAX_VARINT_BYTES <= 2 {
             _mm_or_si128(
                 _mm_and_si128(comb, _mm_set_epi64x(0x000000000000007f, 0x000000000000007f)),
-                _mm_srli_epi64(_mm_and_si128(comb, _mm_set_epi64x(0x0000000000000100, 0x0000000000000100)), 1),
+                _mm_srli_epi64(
+                    _mm_and_si128(comb, _mm_set_epi64x(0x0000000000000100, 0x0000000000000100)),
+                    1,
+                ),
             )
         } else if T::MAX_VARINT_BYTES <= 3 && U::MAX_VARINT_BYTES <= 3 {
             _mm_or_si128(
                 _mm_or_si128(
                     _mm_and_si128(comb, _mm_set_epi64x(0x000000000000007f, 0x000000000000007f)),
-                    _mm_srli_epi64(_mm_and_si128(comb, _mm_set_epi64x(0x0000000000030000, 0x0000000000030000)), 2),
+                    _mm_srli_epi64(
+                        _mm_and_si128(comb, _mm_set_epi64x(0x0000000000030000, 0x0000000000030000)),
+                        2,
+                    ),
                 ),
-                _mm_srli_epi64(_mm_and_si128(comb, _mm_set_epi64x(0x0000000000007f00, 0x0000000000007f00)), 1),
+                _mm_srli_epi64(
+                    _mm_and_si128(comb, _mm_set_epi64x(0x0000000000007f00, 0x0000000000007f00)),
+                    1,
+                ),
             )
         } else {
             _mm_or_si128(
                 _mm_or_si128(
                     _mm_and_si128(comb, _mm_set_epi64x(0x000000000000007f, 0x000000000000007f)),
-                    _mm_srli_epi64(_mm_and_si128(comb, _mm_set_epi64x(0x0000000f00000000, 0x0000000f00000000)), 4),
+                    _mm_srli_epi64(
+                        _mm_and_si128(comb, _mm_set_epi64x(0x0000000f00000000, 0x0000000f00000000)),
+                        4,
+                    ),
                 ),
                 _mm_or_si128(
                     _mm_or_si128(
-                        _mm_srli_epi64(_mm_and_si128(comb, _mm_set_epi64x(0x000000007f000000, 0x000000007f000000)), 3),
-                        _mm_srli_epi64(_mm_and_si128(comb, _mm_set_epi64x(0x00000000007f0000, 0x00000000007f0000)), 2),
+                        _mm_srli_epi64(
+                            _mm_and_si128(
+                                comb,
+                                _mm_set_epi64x(0x000000007f000000, 0x000000007f000000),
+                            ),
+                            3,
+                        ),
+                        _mm_srli_epi64(
+                            _mm_and_si128(
+                                comb,
+                                _mm_set_epi64x(0x00000000007f0000, 0x00000000007f0000),
+                            ),
+                            2,
+                        ),
                     ),
-                    _mm_srli_epi64(_mm_and_si128(comb, _mm_set_epi64x(0x0000000000007f00, 0x0000000000007f00)), 1),
+                    _mm_srli_epi64(
+                        _mm_and_si128(comb, _mm_set_epi64x(0x0000000000007f00, 0x0000000000007f00)),
+                        1,
+                    ),
                 ),
             )
         };
@@ -239,7 +278,9 @@ pub unsafe fn decode_two_unsafe<T: VarIntTarget, U: VarIntTarget>(bytes: *const 
 #[inline]
 #[cfg(any(target_feature = "avx2", doc))]
 #[cfg_attr(rustc_nightly, doc(cfg(target_feature = "avx2")))]
-pub unsafe fn decode_two_wide_unsafe<T: VarIntTarget, U: VarIntTarget>(bytes: *const u8) -> (T, u8, U, u8) {
+pub unsafe fn decode_two_wide_unsafe<T: VarIntTarget, U: VarIntTarget>(
+    bytes: *const u8,
+) -> (T, u8, U, u8) {
     let b = _mm256_loadu_si256(bytes as *const __m256i);
 
     // Get the most significant bits
@@ -258,8 +299,8 @@ pub unsafe fn decode_two_wide_unsafe<T: VarIntTarget, U: VarIntTarget>(bytes: *c
 
     // The second is much more tricky.
     let shuf_gen = _mm256_setr_epi8(
-        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
-        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
+        12, 13, 14, 15,
     );
 
     // Rearrange each 128-bit lane such that ORing them together results in the window of data we want)
@@ -285,7 +326,8 @@ pub unsafe fn decode_two_wide_unsafe<T: VarIntTarget, U: VarIntTarget>(bytes: *c
     let first_num;
     let second_num;
 
-    let should_turbo = true; // PEXT on the two halves is still slower, at least on Coffee Lake
+    // PEXT on the two halves is still slower, at least on Coffee Lake and Broadwell
+    let should_turbo = true;
     if should_turbo {
         // Decode the two halves in parallel using SSE2
         let comb_lo = _mm_unpacklo_epi64(first, second);
@@ -293,29 +335,56 @@ pub unsafe fn decode_two_wide_unsafe<T: VarIntTarget, U: VarIntTarget>(bytes: *c
             _mm_or_si128(
                 _mm_or_si128(
                     _mm_and_si128(comb_lo, _mm_set1_epi64x(0x000000000000007f)),
-                    _mm_srli_epi64(_mm_and_si128(comb_lo, _mm_set1_epi64x(0x7f00000000000000)), 7),
+                    _mm_srli_epi64(
+                        _mm_and_si128(comb_lo, _mm_set1_epi64x(0x7f00000000000000)),
+                        7,
+                    ),
                 ),
                 _mm_or_si128(
-                    _mm_srli_epi64(_mm_and_si128(comb_lo, _mm_set1_epi64x(0x007f000000000000)), 6),
-                    _mm_srli_epi64(_mm_and_si128(comb_lo, _mm_set1_epi64x(0x00007f0000000000)), 5)
-                )
+                    _mm_srli_epi64(
+                        _mm_and_si128(comb_lo, _mm_set1_epi64x(0x007f000000000000)),
+                        6,
+                    ),
+                    _mm_srli_epi64(
+                        _mm_and_si128(comb_lo, _mm_set1_epi64x(0x00007f0000000000)),
+                        5,
+                    ),
+                ),
             ),
             _mm_or_si128(
                 _mm_or_si128(
-                    _mm_srli_epi64(_mm_and_si128(comb_lo, _mm_set1_epi64x(0x0000007f00000000)), 4),
-                    _mm_srli_epi64(_mm_and_si128(comb_lo, _mm_set1_epi64x(0x000000007f000000)), 3)
+                    _mm_srli_epi64(
+                        _mm_and_si128(comb_lo, _mm_set1_epi64x(0x0000007f00000000)),
+                        4,
+                    ),
+                    _mm_srli_epi64(
+                        _mm_and_si128(comb_lo, _mm_set1_epi64x(0x000000007f000000)),
+                        3,
+                    ),
                 ),
                 _mm_or_si128(
-                    _mm_srli_epi64(_mm_and_si128(comb_lo, _mm_set1_epi64x(0x00000000007f0000)), 2),
-                    _mm_srli_epi64(_mm_and_si128(comb_lo, _mm_set1_epi64x(0x0000000000007f00)), 1)
-                )
-            )
+                    _mm_srli_epi64(
+                        _mm_and_si128(comb_lo, _mm_set1_epi64x(0x00000000007f0000)),
+                        2,
+                    ),
+                    _mm_srli_epi64(
+                        _mm_and_si128(comb_lo, _mm_set1_epi64x(0x0000000000007f00)),
+                        1,
+                    ),
+                ),
+            ),
         );
 
         let comb_hi = _mm_unpackhi_epi64(first, second);
         let x_hi = _mm_or_si128(
-            _mm_slli_epi64(_mm_and_si128(comb_hi, _mm_set1_epi64x(0x0000000000000100)), 55),
-            _mm_slli_epi64(_mm_and_si128(comb_hi, _mm_set1_epi64x(0x000000000000007f)), 56)
+            _mm_slli_epi64(
+                _mm_and_si128(comb_hi, _mm_set1_epi64x(0x0000000000000100)),
+                55,
+            ),
+            _mm_slli_epi64(
+                _mm_and_si128(comb_hi, _mm_set1_epi64x(0x000000000000007f)),
+                56,
+            ),
         );
 
         let x = _mm_or_si128(x_lo, x_hi);
@@ -508,7 +577,7 @@ pub unsafe fn encode_unsafe<T: VarIntTarget>(num: T) -> ([u8; 16], u8) {
 
     // Count the number of bytes used
     let bytes = 32 - bits.leading_zeros() as u8; // lzcnt on supported CPUs
-    // TODO: Compiler emits an unnecessary branch here when using bsr/bsl fallback
+                                                 // TODO: Compiler emits an unnecessary branch here when using bsr/bsl fallback
 
     // Fill that many bytes into a vector
     let ascend = _mm_setr_epi8(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);
@@ -526,7 +595,7 @@ pub unsafe fn encode_unsafe<T: VarIntTarget>(num: T) -> ([u8; 16], u8) {
 
 #[cfg(test)]
 mod tests {
-    use crate::{decode, encode, VarIntTarget, decode_two_unsafe};
+    use crate::{decode, decode_two_unsafe, encode, VarIntTarget};
 
     #[test]
     fn it_works() {
@@ -673,7 +742,14 @@ mod tests {
     #[test]
     fn test_two() {
         // let result = unsafe { decode_two_unsafe::<u32, u32>([0x80, 0x80, 0x80, 0x80, 0x01, 0x80, 0x80, 0x80, 0x80, 0x01, 0, 0, 0, 0, 0, 0].as_ptr()) };
-        let result = unsafe { decode_two_unsafe::<u8, u8>([0x80, 0x01, 0x70, 0x01, 0x01, 0x80, 0x80, 0x80, 0x80, 0x01, 0, 0, 0, 0, 0, 0].as_ptr()) };
+        let result = unsafe {
+            decode_two_unsafe::<u8, u8>(
+                [
+                    0x80, 0x01, 0x70, 0x01, 0x01, 0x80, 0x80, 0x80, 0x80, 0x01, 0, 0, 0, 0, 0, 0,
+                ]
+                .as_ptr(),
+            )
+        };
         println!("{:?}", result);
     }
 }

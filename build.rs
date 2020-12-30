@@ -1,9 +1,9 @@
 #[cfg(target_arch = "x86")]
 use std::arch::x86::__cpuid;
 
+use rustc_version::Channel;
 #[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::__cpuid;
-use rustc_version::Channel;
 
 #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
 fn is_pdep_slow() -> bool {
