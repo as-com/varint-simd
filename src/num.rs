@@ -324,7 +324,40 @@ impl VarIntTarget for u64 {
     }
 
     #[inline(always)]
-    #[cfg(not(all(target_arch = "x86_64", target_feature = "bmi2", fast_pdep)))]
+    #[cfg(all(target_feature = "avx2", not(all(target_arch = "x86_64", target_feature = "bmi2", fast_pdep))))]
+    fn num_to_vector_stage1(self) -> [u8; 16] {
+        #[cfg(target_arch = "x86")]
+        use std::arch::x86::*;
+        #[cfg(target_arch = "x86_64")]
+        use std::arch::x86_64::*;
+
+        let mut res = [0u64; 2];
+        let x = self;
+
+        let b = unsafe { _mm_set1_epi64x(self as i64) };
+        let c = unsafe {
+            _mm_or_si128(
+                _mm_or_si128(
+                    _mm_sllv_epi64(_mm_and_si128(b, _mm_set_epi64x(0x00000007f0000000, 0x000003f800000000)), _mm_set_epi64x(4, 5)),
+                    _mm_sllv_epi64(_mm_and_si128(b, _mm_set_epi64x(0x0001fc0000000000, 0x00fe000000000000)), _mm_set_epi64x(6, 7))
+                ),
+                _mm_or_si128(
+                    _mm_sllv_epi64(_mm_and_si128(b, _mm_set_epi64x(0x000000000000007f, 0x0000000000003f80)), _mm_set_epi64x(0, 1)),
+                    _mm_sllv_epi64(_mm_and_si128(b, _mm_set_epi64x(0x00000000001fc000, 0x000000000fe00000)), _mm_set_epi64x(2, 3))
+                )
+            )
+        };
+        let d = unsafe { _mm_or_si128(c, _mm_bsrli_si128(c, 8)) };
+
+        res[0] = unsafe { _mm_extract_epi64(d, 0) as u64 };
+        res[1] = ((x & 0x7f00000000000000) >> 56) | ((x & 0x8000000000000000) >> 55);
+
+        unsafe { std::mem::transmute(res) }
+    }
+
+
+    #[inline(always)]
+    #[cfg(not(all(target_feature = "avx2", not(all(target_arch = "x86_64", target_feature = "bmi2", fast_pdep)))))]
     fn num_to_vector_stage1(self) -> [u8; 16] {
         let mut res = [0u64; 2];
         let x = self;
