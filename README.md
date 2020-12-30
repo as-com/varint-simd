@@ -8,8 +8,8 @@ varint-simd is a fast SIMD-accelerated [variable-length integer](https://develop
 encoder and decoder written in Rust. It is intended for use in implementations of Protocol Buffers (protobuf), Apache
 Avro, and similar serialization formats.
 
-This library currently targets x86_64 processors with support for SSSE3 (Intel Core/AMD Bulldozer or newer), with 
-optional optimizations for processors supporting POPCNT, LZCNT, and/or BMI2.
+This library currently targets a minimum of x86_64 processors with support for SSSE3 (Intel Core/AMD Bulldozer or 
+newer), with optional optimizations for processors supporting POPCNT, LZCNT, BMI2, and/or AVX2.
 
 ## Usage
 **Important:** For optimal performance, ensure the Rust compiler has an appropriate `target-cpu` setting. An example is

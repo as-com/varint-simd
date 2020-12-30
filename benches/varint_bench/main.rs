@@ -4,7 +4,8 @@ use rand::distributions::{Distribution, Standard};
 use rand::prelude::ThreadRng;
 use rand::{thread_rng, Rng};
 use varint_simd::{
-    decode, decode_three_unsafe, decode_two_unsafe, decode_two_wide_unsafe, decode_unsafe, encode,
+    decode, decode_four_unsafe, decode_three_unsafe, decode_two_unsafe, decode_two_wide_unsafe,
+    decode_unsafe, encode,
 };
 
 mod leb128;
@@ -47,6 +48,28 @@ where
         let mut encoded = [0; 32];
         let first_len = rng.gen::<T>().encode_var(&mut encoded);
         rng.gen::<U>().encode_var(&mut encoded[first_len..]);
+        encoded
+    }
+}
+
+fn create_quad_encoded_generator<T: VarInt, U: VarInt, V: VarInt, W: VarInt, R: Rng>(
+    rng: &mut R,
+) -> impl FnMut() -> [u8; 16] + '_
+where
+    Standard: Distribution<T>,
+    Standard: Distribution<U>,
+    Standard: Distribution<V>,
+    Standard: Distribution<W>,
+{
+    move || {
+        let mut encoded = [0; 16];
+        let first_len = rng.gen::<T>().encode_var(&mut encoded);
+        let second_len = rng.gen::<U>().encode_var(&mut encoded[first_len..]);
+        let third_len = rng
+            .gen::<V>()
+            .encode_var(&mut encoded[first_len + second_len..]);
+        rng.gen::<W>()
+            .encode_var(&mut encoded[first_len + second_len + third_len..]);
         encoded
     }
 }
@@ -188,6 +211,14 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         b.iter_batched_ref(
             create_encoded_generator::<u16, _>(&mut rng),
             |encoded| decode::<u16>(encoded).unwrap().0,
+            BatchSize::SmallInput,
+        )
+    });
+
+    group.bench_function("varint-simd/4x/unsafe", |b| {
+        b.iter_batched_ref(
+            create_quad_encoded_generator::<u16, u16, u16, u16, _>(&mut rng),
+            |encoded| unsafe { decode_four_unsafe::<u16, u16, u16, u16>(encoded.as_ptr()) },
             BatchSize::SmallInput,
         )
     });

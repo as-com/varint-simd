@@ -19,7 +19,9 @@ pub mod decode;
 pub mod encode;
 pub mod num;
 
+#[doc(inline)]
 pub use decode::*;
+#[doc(inline)]
 pub use encode::*;
 pub use num::*;
 
@@ -50,7 +52,7 @@ impl std::error::Error for VarIntDecodeError {}
 
 #[cfg(test)]
 mod tests {
-    use crate::{decode, decode_two_unsafe, encode, VarIntTarget};
+    use crate::{decode, decode_four_unsafe, decode_two_unsafe, encode, VarIntTarget};
 
     #[test]
     fn it_works() {
@@ -205,6 +207,20 @@ mod tests {
                 .as_ptr(),
             )
         };
+        println!("{:?}", result);
+    }
+
+    #[test]
+    fn test_four() {
+        let result = unsafe {
+            decode_four_unsafe::<u16, u16, u16, u16>(
+                [
+                    0x01, 0x82, 0x01, 0x83, 0x80, 0x01, 0x84, 0x80, 0x01, 0, 0, 0, 0, 0, 0,
+                ]
+                .as_ptr(),
+            )
+        };
+
         println!("{:?}", result);
     }
 }
