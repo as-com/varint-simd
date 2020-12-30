@@ -3,6 +3,7 @@ use std::arch::x86::__cpuid;
 
 #[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::__cpuid;
+use rustc_version::Channel;
 
 #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
 fn is_pdep_slow() -> bool {
@@ -52,5 +53,9 @@ fn main() {
         if !is_pdep_slow() {
             println!("cargo:rustc-cfg=fast_pdep");
         }
+    }
+
+    if rustc_version::version_meta().unwrap().channel == Channel::Nightly {
+        println!("cargo:rustc-cfg=rustc_nightly");
     }
 }

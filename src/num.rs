@@ -19,6 +19,12 @@ pub trait VarIntTarget: Debug + Eq + PartialEq + Sized + Copy {
     /// intrinsic vectors.
     fn vector_to_num(res: [u8; 16]) -> Self;
 
+    /// Cast from u32 to self
+    fn cast_u32(num: u32) -> Self;
+
+    /// Cast from u64 to self
+    fn cast_u64(num: u64) -> Self;
+
     /// Splits this number into 7-bit segments for encoding
     fn num_to_vector_stage1(self) -> [u8; 16];
 
@@ -51,6 +57,16 @@ impl VarIntTarget for u8 {
         let res: [u64; 2] = unsafe { std::mem::transmute(res) };
         let x = res[0];
         ((x & 0x000000000000007f) | ((x & 0x0000000000000100) >> 1)) as u8
+    }
+
+    #[inline(always)]
+    fn cast_u32(num: u32) -> Self {
+        num as u8
+    }
+
+    #[inline(always)]
+    fn cast_u64(num: u64) -> Self {
+        num as u8
     }
 
     #[inline(always)]
@@ -116,6 +132,16 @@ impl VarIntTarget for u16 {
     }
 
     #[inline(always)]
+    fn cast_u32(num: u32) -> Self {
+        num as u16
+    }
+
+    #[inline(always)]
+    fn cast_u64(num: u64) -> Self {
+        num as u16
+    }
+
+    #[inline(always)]
     #[cfg(all(target_arch = "x86_64", target_feature = "bmi2", fast_pdep))]
     fn num_to_vector_stage1(self) -> [u8; 16] {
         use std::arch::x86_64::_pdep_u64;
@@ -178,6 +204,16 @@ impl VarIntTarget for u32 {
             | ((x & 0x000000007f000000) >> 3)
             | ((x & 0x00000000007f0000) >> 2)
             | ((x & 0x0000000000007f00) >> 1)) as u32
+    }
+
+    #[inline(always)]
+    fn cast_u32(num: u32) -> Self {
+        num
+    }
+
+    #[inline(always)]
+    fn cast_u64(num: u64) -> Self {
+        num as u32
     }
 
     #[inline(always)]
@@ -261,6 +297,16 @@ impl VarIntTarget for u64 {
             // don't forget about bytes spilling to the other word
             | ((y & 0x0000000000000100) << 55)
             | ((y & 0x000000000000007f) << 56)
+    }
+
+    #[inline(always)]
+    fn cast_u32(num: u32) -> Self {
+        num as u64
+    }
+
+    #[inline(always)]
+    fn cast_u64(num: u64) -> Self {
+        num
     }
 
     #[inline(always)]

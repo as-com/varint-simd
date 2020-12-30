@@ -28,6 +28,9 @@ integer-encoding = "2.1"
 rand = "0.8"
 bytes = "1" # prost-varint
 
+[build-dependencies]
+rustc_version = "0.3.0"
+
 [[bench]]
 name = "varint_bench"
 harness = false
