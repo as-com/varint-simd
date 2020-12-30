@@ -143,6 +143,11 @@ pub unsafe fn decode_two_unsafe<T: VarIntTarget, U: VarIntTarget>(
         );
     }
 
+    if T::MAX_VARINT_BYTES <= 5 && U::MAX_VARINT_BYTES <= 5 {
+        // This will work with our lookup table, use that version
+        return decode_two_u32_unsafe(bytes);
+    }
+
     let b = _mm_loadu_si128(bytes as *const __m128i);
 
     // First find where the boundaries are
@@ -173,7 +178,6 @@ pub unsafe fn decode_two_unsafe<T: VarIntTarget, U: VarIntTarget>(
         && U::MAX_VARINT_BYTES <= 8
         // PDEP/PEXT are still a little faster here
         && cfg!(not(all(
-            target_arch = "x86_64",
             target_feature = "bmi2",
             fast_pdep
         )));
@@ -196,6 +200,51 @@ pub unsafe fn decode_two_unsafe<T: VarIntTarget, U: VarIntTarget>(
     } else {
         first_num = T::vector_to_num(std::mem::transmute(first));
         second_num = U::vector_to_num(std::mem::transmute(second));
+    }
+
+    (first_num, first_len as u8, second_num, second_len as u8)
+}
+
+#[inline]
+#[cfg(any(target_feature = "ssse3", doc))]
+unsafe fn decode_two_u32_unsafe<T: VarIntTarget, U: VarIntTarget>(bytes: *const u8) -> (T, u8, U, u8) {
+    let b = _mm_loadu_si128(bytes as *const __m128i);
+
+    // Get the movemask and mask out irrelevant parts
+    let bitmask = _mm_movemask_epi8(b) as u32 & 0b1111111111;
+
+    // Use lookup table to get the shuffle mask
+    let (lookup, first_len, second_len) = lookup::LOOKUP_DOUBLE_STEP1[bitmask as usize];
+    let shuf = lookup::LOOKUP_DOUBLE_VEC[lookup as usize];
+
+    let comb = _mm_shuffle_epi8(b, shuf);
+
+    let first_num;
+    let second_num;
+
+    // Only use "turbo" mode if PDEP/PEXT are not faster
+    let should_turbo = cfg!(not(all(
+            target_feature = "bmi2",
+            fast_pdep
+        )));
+    if should_turbo {
+        // const, so optimized out
+
+        let x = if T::MAX_VARINT_BYTES <= 2 && U::MAX_VARINT_BYTES <= 2 {
+            dual_u8_stage2(comb)
+        } else if T::MAX_VARINT_BYTES <= 3 && U::MAX_VARINT_BYTES <= 3 {
+            dual_u16_stage2(comb)
+        } else {
+            dual_u32_stage2(comb)
+        };
+
+        let x: [u32; 4] = std::mem::transmute(x);
+        // _mm_extract_epi32 requires SSE4.1
+        first_num = T::cast_u32(x[0]);
+        second_num = U::cast_u32(x[2]);
+    } else {
+        first_num = T::vector_to_num(std::mem::transmute(comb));
+        second_num = U::vector_to_num(std::mem::transmute(_mm_bsrli_si128(comb, 8)));
     }
 
     (first_num, first_len as u8, second_num, second_len as u8)
@@ -473,7 +522,6 @@ pub unsafe fn decode_four_unsafe<
         && W::MAX_VARINT_BYTES <= 4
         // PDEP/PEXT are still a little faster here
         && cfg!(not(all(
-            target_arch = "x86_64",
             target_feature = "bmi2",
             fast_pdep
         )));
