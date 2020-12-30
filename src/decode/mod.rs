@@ -207,7 +207,9 @@ pub unsafe fn decode_two_unsafe<T: VarIntTarget, U: VarIntTarget>(
 
 #[inline]
 #[cfg(any(target_feature = "ssse3", doc))]
-unsafe fn decode_two_u32_unsafe<T: VarIntTarget, U: VarIntTarget>(bytes: *const u8) -> (T, u8, U, u8) {
+unsafe fn decode_two_u32_unsafe<T: VarIntTarget, U: VarIntTarget>(
+    bytes: *const u8,
+) -> (T, u8, U, u8) {
     let b = _mm_loadu_si128(bytes as *const __m128i);
 
     // Get the movemask and mask out irrelevant parts
@@ -223,10 +225,7 @@ unsafe fn decode_two_u32_unsafe<T: VarIntTarget, U: VarIntTarget>(bytes: *const 
     let second_num;
 
     // Only use "turbo" mode if PDEP/PEXT are not faster
-    let should_turbo = cfg!(not(all(
-            target_feature = "bmi2",
-            fast_pdep
-        )));
+    let should_turbo = cfg!(not(all(target_feature = "bmi2", fast_pdep)));
     if should_turbo {
         // const, so optimized out
 
