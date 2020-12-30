@@ -21,6 +21,7 @@ pub mod num;
 
 pub use decode::*;
 pub use encode::*;
+pub use num::*;
 
 // Functions to help with debugging
 #[allow(dead_code)]
