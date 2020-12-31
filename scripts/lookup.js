@@ -9,7 +9,7 @@ for (let first_len = 1; first_len <= 10; first_len++) {
     }
 
     for (let i = 0; i < 8-first_len; i++) {
-        first_part += "0, "
+        first_part += "255, "
     }
 
     for (let second_len = 1; second_len <= Math.min(10, 16 - first_len); second_len++) {
@@ -19,7 +19,7 @@ for (let first_len = 1; first_len <= 10; first_len++) {
         }
 
         for (let i = 0; i < 8-second_len; i++) {
-            second_part += "0, "
+            second_part += "255, "
         }
 
         console.log(first_part + second_part, `// ${first_len}, ${second_len}`);

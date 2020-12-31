@@ -4,8 +4,7 @@ use rand::distributions::{Distribution, Standard};
 use rand::prelude::ThreadRng;
 use rand::{thread_rng, Rng};
 use varint_simd::{
-    decode, decode_four_unsafe, decode_three_unsafe, decode_two_unsafe, decode_two_wide_unsafe,
-    decode_unsafe, encode,
+    decode, decode_four_unsafe, decode_two_unsafe, decode_two_wide_unsafe, decode_unsafe, encode,
 };
 
 mod leb128;
@@ -468,61 +467,6 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         )
     });
     group.finish();
-
-    // experimental stuff, don't run
-    if false {
-        #[inline]
-        fn generate_triple_u64_var(rng: &mut ThreadRng) -> [u8; 36] {
-            let mut encoded = [0; 36];
-            let first_len = rng.gen::<u64>().encode_var(&mut encoded);
-            let second_len = rng.gen::<u64>().encode_var(&mut encoded[first_len..]);
-            rng.gen::<u64>()
-                .encode_var(&mut encoded[first_len + second_len..]);
-            encoded
-        }
-
-        let mut group = c.benchmark_group("varint-u64/triple");
-        group.bench_function("integer-encoding", |b| {
-            b.iter_batched(
-                || generate_triple_u64_var(&mut rng),
-                |encoded| {
-                    let first = u64::decode_var(&encoded).unwrap();
-                    let second = u64::decode_var(&encoded[first.1..]).unwrap();
-                    let third = u64::decode_var(&encoded[first.1 + second.1..]).unwrap();
-
-                    (first.0, second.0, third.0)
-                },
-                BatchSize::SmallInput,
-            )
-        });
-
-        group.bench_function("prost-varint", |b| {
-            b.iter_batched(
-                || generate_triple_u64_var(&mut rng).to_vec(),
-                |encoded| {
-                    let mut slice = encoded.as_slice();
-                    let first = prost_varint::decode_varint(&mut slice).unwrap();
-                    let second = prost_varint::decode_varint(&mut slice).unwrap();
-                    let third = prost_varint::decode_varint(&mut slice).unwrap();
-
-                    (first, second, third)
-                },
-                BatchSize::SmallInput,
-            )
-        });
-
-        group.bench_function("varint-simd", |b| {
-            b.iter_batched(
-                || generate_triple_u64_var(&mut rng).to_vec(),
-                |encoded| {
-                    let decoded = unsafe { decode_three_unsafe::<u64, u64, u64>(&encoded) };
-                    (decoded.0, decoded.2, decoded.4)
-                },
-                BatchSize::SmallInput,
-            )
-        });
-        group.finish();
-    }
 }
 
 criterion_group!(benches, criterion_benchmark);

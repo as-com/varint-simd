@@ -216,8 +216,9 @@ unsafe fn decode_two_u32_unsafe<T: VarIntTarget, U: VarIntTarget>(
     let bitmask = _mm_movemask_epi8(b) as u32 & 0b1111111111;
 
     // Use lookup table to get the shuffle mask
-    let (lookup, first_len, second_len) = lookup::LOOKUP_DOUBLE_STEP1[bitmask as usize];
-    let shuf = lookup::LOOKUP_DOUBLE_VEC[lookup as usize];
+    let (lookup, first_len, second_len) =
+        *lookup::LOOKUP_DOUBLE_STEP1.get_unchecked(bitmask as usize);
+    let shuf = *lookup::LOOKUP_DOUBLE_VEC.get_unchecked(lookup as usize);
 
     let comb = _mm_shuffle_epi8(b, shuf);
 
@@ -470,6 +471,14 @@ pub unsafe fn decode_four_unsafe<
         );
     }
 
+    if T::MAX_VARINT_BYTES <= 3
+        && U::MAX_VARINT_BYTES <= 3
+        && V::MAX_VARINT_BYTES <= 3
+        && W::MAX_VARINT_BYTES <= 3
+    {
+        return decode_four_u16_unsafe(bytes);
+    }
+
     let b = _mm_loadu_si128(bytes as *const __m128i);
 
     // First find where the boundaries are
@@ -571,104 +580,88 @@ pub unsafe fn decode_four_unsafe<
     )
 }
 
-/// **Experimental.** Decodes three adjacent varints from the given pointer simultaneously.
-/// This currently runs much slower than a scalar or hybrid implementation. Requires AVX2 support.
-///
-/// # Safety
-/// There must be at least 32 bytes of memory allocated after the beginning of the pointer.
-/// Otherwise, there may be undefined behavior.
 #[inline]
-#[cfg(target_feature = "avx2")]
-pub unsafe fn decode_three_unsafe<T: VarIntTarget, U: VarIntTarget, V: VarIntTarget>(
-    bytes: &[u8],
-) -> (T, u8, U, u8, V, u8) {
-    let b = _mm256_loadu_si256(bytes.as_ptr() as *const __m256i);
+#[cfg(any(target_feature = "ssse3", doc))]
+unsafe fn decode_four_u16_unsafe<
+    T: VarIntTarget,
+    U: VarIntTarget,
+    V: VarIntTarget,
+    W: VarIntTarget,
+>(
+    bytes: *const u8,
+) -> (T, U, V, W, u8, u8, u8, u8) {
+    let b = _mm_loadu_si128(bytes as *const __m128i);
 
-    // Get the most significant bits
-    let bitmask = _mm256_movemask_epi8(b) as u32;
+    // First find where the boundaries are
+    let bitmask = _mm_movemask_epi8(b) as u32;
 
-    // Find the number of bytes taken up by each varint
-    let bm_not = !bitmask;
-    let first_len = bm_not.trailing_zeros() + 1; // should compile to bsf or tzcnt (?), verify
-    let bm_not_2 = bm_not >> first_len;
-    let second_len = bm_not_2.trailing_zeros() + 1;
-    let bm_not_3 = bm_not_2 >> second_len;
-    let third_len = bm_not_3.trailing_zeros() + 1;
+    // Use the lookup table
+    let lookup = *lookup::LOOKUP_QUAD_STEP1.get_unchecked((bitmask & 0b111111111111) as usize);
 
-    // println!("{} {} {}", first_len, second_len, third_len);
+    // Fetch the shuffle mask
+    let shuf = *lookup::LOOKUP_QUAD_VEC.get_unchecked((lookup & 0b11111111) as usize);
 
-    // Create and parse vector consisting solely of the first varint
-    let ascend = _mm_setr_epi8(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);
-    let first_mask = _mm_cmplt_epi8(ascend, _mm_set1_epi8(first_len as i8));
-    let first = _mm_and_si128(_mm256_extracti128_si256(b, 0), first_mask);
-    // println!("{:?}", slice_m128i(first));
+    // Extract the lengths while we're waiting
+    let first_len = (lookup >> 8) & 0b1111;
+    let second_len = (lookup >> 12) & 0b1111;
+    let third_len = (lookup >> 16) & 0b1111;
+    let fourth_len = (lookup >> 20) & 0b1111;
 
-    let msb_mask = _mm_set_epi8(
-        0, 0, 0, 0, 0, 0, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127,
-    );
-    let first_msb = _mm_and_si128(msb_mask, first);
-    let first_result = T::vector_to_num(std::mem::transmute(first_msb));
+    let comb = _mm_shuffle_epi8(b, shuf);
 
-    // The second and third are much more tricky.
-    let shuf_gen = _mm256_setr_epi8(
-        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
-        12, 13, 14, 15,
-    );
+    // let invalid = lookup >> 31;
 
-    // Rearrange each 128-bit lane such that ORing them together results in the window of data we want)
-    let shuf_add = _mm256_set_m128i(
-        _mm_set1_epi8(-(16i8 - first_len as i8)),
-        _mm_set1_epi8(first_len as i8),
-    );
-    let shuf_added = _mm256_add_epi8(shuf_gen, shuf_add);
-    let shuf = _mm256_or_si256(
-        shuf_added,
-        _mm256_cmpgt_epi8(shuf_added, _mm256_set1_epi8(15)),
-    );
-    let shuffled = _mm256_shuffle_epi8(b, shuf);
+    let first_num;
+    let second_num;
+    let third_num;
+    let fourth_num;
 
-    // OR the halves together, and now we have a view of the second varint
-    let second_shifted = _mm_or_si128(
-        _mm256_extracti128_si256(shuffled, 0),
-        _mm256_extracti128_si256(shuffled, 1),
-    );
-    let second_mask = _mm_cmplt_epi8(ascend, _mm_set1_epi8(second_len as i8));
-    let second = _mm_and_si128(second_shifted, second_mask);
-    // println!("second {:?}", slice_m128i(second));
+    // Only use "turbo" mode if the numbers fit in 64-bit lanes
+    let should_turbo =
+        // PDEP/PEXT are still a little faster here
+        cfg!(not(all(
+            target_feature = "bmi2",
+            fast_pdep
+        )));
+    if should_turbo {
+        // const, so optimized out
 
-    // Mask out the MSB, and we're done
-    let second_msb = _mm_and_si128(msb_mask, second);
-    let second_result = U::vector_to_num(std::mem::transmute(second_msb));
+        let x = if T::MAX_VARINT_BYTES <= 2 && U::MAX_VARINT_BYTES <= 2 {
+            _mm_or_si128(
+                _mm_and_si128(comb, _mm_set1_epi32(0x0000007f)),
+                _mm_srli_epi32(_mm_and_si128(comb, _mm_set1_epi32(0x00000100)), 1),
+            )
+        } else {
+            _mm_or_si128(
+                _mm_or_si128(
+                    _mm_and_si128(comb, _mm_set1_epi32(0x0000007f)),
+                    _mm_srli_epi32(_mm_and_si128(comb, _mm_set1_epi32(0x00030000)), 2),
+                ),
+                _mm_srli_epi32(_mm_and_si128(comb, _mm_set1_epi32(0x00007f00)), 1),
+            )
+        };
 
-    // The third is done similarly
-    let shuf_add = _mm256_set_m128i(
-        _mm_set1_epi8(-(16i8 - (first_len + second_len) as i8)),
-        _mm_set1_epi8((first_len + second_len) as i8),
-    );
-    let shuf_added = _mm256_add_epi8(shuf_gen, shuf_add);
-    let shuf = _mm256_or_si256(
-        shuf_added,
-        _mm256_cmpgt_epi8(shuf_added, _mm256_set1_epi8(15)),
-    );
-    let shuffled = _mm256_shuffle_epi8(b, shuf);
-
-    let third_shifted = _mm_or_si128(
-        _mm256_extracti128_si256(shuffled, 0),
-        _mm256_extracti128_si256(shuffled, 1),
-    );
-    let third_mask = _mm_cmplt_epi8(ascend, _mm_set1_epi8(third_len as i8));
-    let third = _mm_and_si128(third_mask, third_shifted);
-    // println!("third {:?}", slice_m128i(third));
-
-    let third_msb = _mm_and_si128(msb_mask, third);
-    let third_result = V::vector_to_num(std::mem::transmute(third_msb));
+        let x: [u32; 4] = std::mem::transmute(x);
+        // _mm_extract_epi32 requires SSE4.1
+        first_num = T::cast_u32(x[0]);
+        second_num = U::cast_u32(x[1]);
+        third_num = V::cast_u32(x[2]);
+        fourth_num = W::cast_u32(x[3]);
+    } else {
+        first_num = T::vector_to_num(std::mem::transmute(comb));
+        second_num = U::vector_to_num(std::mem::transmute(_mm_bsrli_si128(comb, 4)));
+        third_num = V::vector_to_num(std::mem::transmute(_mm_bsrli_si128(comb, 8)));
+        fourth_num = W::vector_to_num(std::mem::transmute(_mm_bsrli_si128(comb, 12)));
+    }
 
     (
-        first_result,
+        first_num,
+        second_num,
+        third_num,
+        fourth_num,
         first_len as u8,
-        second_result,
         second_len as u8,
-        third_result,
         third_len as u8,
+        fourth_len as u8,
     )
 }

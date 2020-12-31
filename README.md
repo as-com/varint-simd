@@ -2,7 +2,7 @@ varint-simd
 ==
 [![Crates.io](https://img.shields.io/crates/v/varint-simd)](https://crates.io/crates/varint-simd)
 [![Docs.rs](https://docs.rs/varint-simd/badge.svg)](https://docs.rs/varint-simd)
-![Continuous integration](https://github.com/as-com/varint-simd/workflows/Continuous%20integration/badge.svg)
+[![Continuous integration](https://github.com/as-com/varint-simd/workflows/Continuous%20integration/badge.svg)](https://github.com/as-com/varint-simd/actions?query=workflow%3A%22Continuous+integration%22)
 
 varint-simd is a fast SIMD-accelerated [variable-length integer](https://developers.google.com/protocol-buffers/docs/encoding) 
 encoder and decoder written in Rust. It is intended for use in implementations of Protocol Buffers (protobuf), Apache
