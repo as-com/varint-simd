@@ -12,7 +12,7 @@ for (let first_len = 1; first_len <= 10; first_len++) {
         first_part += "0, "
     }
 
-    for (let second_len = 1; second_len <= 10; second_len++) {
+    for (let second_len = 1; second_len <= Math.min(10, 16 - first_len); second_len++) {
         let second_part = "";
         for (let i = 0; i < Math.min(second_len, 8); i++) {
             second_part += "" + (first_len + i) + ", "
@@ -43,7 +43,6 @@ function ctz(v) {
 }
 
 let table2 = "";
-let table3 = "";
 for (let mask = 0; mask < 2**10; mask++) {
     let bm_not = ~mask;
     let first_len = ctz(bm_not) + 1;
