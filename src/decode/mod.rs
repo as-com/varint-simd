@@ -32,16 +32,20 @@ pub fn decode<T: VarIntTarget>(bytes: &[u8]) -> Result<(T, u8), VarIntDecodeErro
         unsafe { decode_unsafe(bytes.as_ptr()) }
     } else if !bytes.is_empty() {
         let mut data = [0u8; 16];
-        let len = min(10, bytes.len());
+        let len = min(16, bytes.len());
+        // unsafe { std::ptr::copy_nonoverlapping(bytes.as_ptr(), data.as_mut_ptr(), len); }
         data[..len].copy_from_slice(&bytes[..len]);
         unsafe { decode_unsafe(data.as_ptr()) }
     } else {
         return Err(VarIntDecodeError::NotEnoughBytes);
     };
 
-    if result.1 > T::MAX_VARINT_BYTES
-        || result.1 == T::MAX_VARINT_BYTES
-            && bytes[(T::MAX_VARINT_BYTES - 1) as usize] > T::MAX_LAST_VARINT_BYTE
+    // The ordering of conditions here is weird because of a performance regression (?) in rustc 1.49
+    if bytes.len() >= T::MAX_VARINT_BYTES as usize
+        // we perform a signed comparison here because a valid last byte is always positive
+        && unsafe { *bytes.get_unchecked((T::MAX_VARINT_BYTES - 1) as usize) } as i8 > T::MAX_LAST_VARINT_BYTE as i8
+        && result.1 == T::MAX_VARINT_BYTES
+        || result.1 > T::MAX_VARINT_BYTES
     {
         Err(VarIntDecodeError::Overflow)
     } else {
