@@ -391,15 +391,6 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             BatchSize::SmallInput,
         )
     });
-
-    group.throughput(Throughput::Elements(4));
-    group.bench_function("varint-simd/4x/unsafe", |b| {
-        b.iter_batched_ref(
-            create_quad_encoded_generator::<u32, u32, u32, u32, _>(&mut rng),
-            |encoded| unsafe { decode_four_unsafe::<u32, u32, u32, u32>(encoded.as_ptr()) },
-            BatchSize::SmallInput,
-        )
-    });
     group.finish();
 
     let mut group = c.benchmark_group("varint-u32/encode");
