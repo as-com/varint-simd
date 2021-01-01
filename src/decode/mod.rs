@@ -132,7 +132,7 @@ pub unsafe fn decode_unsafe<T: VarIntTarget>(bytes: *const u8) -> (T, u8) {
 #[cfg_attr(rustc_nightly, doc(cfg(target_feature = "ssse3")))]
 pub unsafe fn decode_two_unsafe<T: VarIntTarget, U: VarIntTarget>(
     bytes: *const u8,
-) -> (T, u8, U, u8) {
+) -> (T, U, u8, u8) {
     if T::MAX_VARINT_BYTES + U::MAX_VARINT_BYTES > 16 {
         // check will be eliminated at compile time
         panic!(
@@ -202,14 +202,14 @@ pub unsafe fn decode_two_unsafe<T: VarIntTarget, U: VarIntTarget>(
         second_num = U::vector_to_num(std::mem::transmute(second));
     }
 
-    (first_num, first_len as u8, second_num, second_len as u8)
+    (first_num, second_num, first_len as u8, second_len as u8)
 }
 
 #[inline]
 #[cfg(any(target_feature = "ssse3", doc))]
 unsafe fn decode_two_u32_unsafe<T: VarIntTarget, U: VarIntTarget>(
     bytes: *const u8,
-) -> (T, u8, U, u8) {
+) -> (T, U, u8, u8) {
     let b = _mm_loadu_si128(bytes as *const __m128i);
 
     // Get the movemask and mask out irrelevant parts
@@ -247,7 +247,7 @@ unsafe fn decode_two_u32_unsafe<T: VarIntTarget, U: VarIntTarget>(
         second_num = U::vector_to_num(std::mem::transmute(_mm_bsrli_si128(comb, 8)));
     }
 
-    (first_num, first_len as u8, second_num, second_len as u8)
+    (first_num, second_num, first_len as u8, second_len as u8)
 }
 
 #[inline(always)]
@@ -320,7 +320,7 @@ unsafe fn dual_u32_stage2(comb: __m128i) -> __m128i {
 #[cfg_attr(rustc_nightly, doc(cfg(target_feature = "avx2")))]
 pub unsafe fn decode_two_wide_unsafe<T: VarIntTarget, U: VarIntTarget>(
     bytes: *const u8,
-) -> (T, u8, U, u8) {
+) -> (T, U, u8, u8) {
     let b = _mm256_loadu_si256(bytes as *const __m256i);
 
     // Get the most significant bits
@@ -436,7 +436,7 @@ pub unsafe fn decode_two_wide_unsafe<T: VarIntTarget, U: VarIntTarget>(
         second_num = U::vector_to_num(std::mem::transmute(second));
     }
 
-    (first_num, first_len as u8, second_num, second_len as u8)
+    (first_num, second_num, first_len as u8, second_len as u8)
 }
 
 /// Decodes four varints simultaneously. Target types must fit within 16 bytes when varint encoded.
@@ -458,7 +458,7 @@ pub unsafe fn decode_four_unsafe<
     W: VarIntTarget,
 >(
     bytes: *const u8,
-) -> (T, U, V, W, u8, u8, u8, u8) {
+) -> (T, U, V, W, u8, u8, u8, u8, bool) {
     if T::MAX_VARINT_BYTES + U::MAX_VARINT_BYTES + V::MAX_VARINT_BYTES + W::MAX_VARINT_BYTES > 16 {
         // check will be eliminated at compile time
         panic!(
@@ -577,6 +577,7 @@ pub unsafe fn decode_four_unsafe<
         second_len as u8,
         third_len as u8,
         fourth_len as u8,
+        false,
     )
 }
 
@@ -589,7 +590,7 @@ unsafe fn decode_four_u16_unsafe<
     W: VarIntTarget,
 >(
     bytes: *const u8,
-) -> (T, U, V, W, u8, u8, u8, u8) {
+) -> (T, U, V, W, u8, u8, u8, u8, bool) {
     let b = _mm_loadu_si128(bytes as *const __m128i);
 
     // First find where the boundaries are
@@ -609,20 +610,15 @@ unsafe fn decode_four_u16_unsafe<
 
     let comb = _mm_shuffle_epi8(b, shuf);
 
-    // let invalid = lookup >> 31;
+    let invalid = lookup >> 31;
 
     let first_num;
     let second_num;
     let third_num;
     let fourth_num;
 
-    // Only use "turbo" mode if the numbers fit in 64-bit lanes
-    let should_turbo =
-        // PDEP/PEXT are still a little faster here
-        cfg!(not(all(
-            target_feature = "bmi2",
-            fast_pdep
-        )));
+    // PDEP/PEXT are still a little faster here
+    let should_turbo = cfg!(not(all(target_feature = "bmi2", fast_pdep)));
     if should_turbo {
         // const, so optimized out
 
@@ -663,5 +659,113 @@ unsafe fn decode_four_u16_unsafe<
         second_len as u8,
         third_len as u8,
         fourth_len as u8,
+        invalid != 0,
     )
+}
+
+/// Decode eight varints up to size u8 at once.
+#[inline]
+#[cfg(any(target_feature = "ssse3", doc))]
+pub unsafe fn decode_eight_u8_unsafe(bytes: *const u8) -> ([u8; 8], u8) {
+    let b = _mm_loadu_si128(bytes as *const __m128i);
+
+    let ones = _mm_set1_epi8(1);
+    let mut lens = _mm_setzero_si128();
+    let mut shift = _mm_and_si128(_mm_cmplt_epi8(b, _mm_setzero_si128()), ones);
+    let ascend = _mm_setr_epi8(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);
+    let asc_one = _mm_setr_epi8(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16);
+    let mut window_small = _mm_setr_epi8(1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+
+    let broadcast_mask = _mm_setzero_si128();
+
+    // if the first byte is zero, shift down by 1, if the first byte is one, shift down by 2
+    // 0
+    let first_byte = _mm_shuffle_epi8(shift, broadcast_mask);
+    shift = _mm_shuffle_epi8(shift, _mm_add_epi8(asc_one, first_byte));
+    lens = _mm_or_si128(lens, _mm_and_si128(first_byte, window_small));
+    window_small = _mm_bslli_si128(window_small, 1);
+
+    // 1
+    let first_byte = _mm_shuffle_epi8(shift, broadcast_mask);
+    shift = _mm_shuffle_epi8(shift, _mm_add_epi8(asc_one, first_byte));
+    lens = _mm_or_si128(lens, _mm_and_si128(first_byte, window_small));
+    window_small = _mm_bslli_si128(window_small, 1);
+
+    // 2
+    let first_byte = _mm_shuffle_epi8(shift, broadcast_mask);
+    shift = _mm_shuffle_epi8(shift, _mm_add_epi8(asc_one, first_byte));
+    lens = _mm_or_si128(lens, _mm_and_si128(first_byte, window_small));
+    window_small = _mm_bslli_si128(window_small, 1);
+
+    // 3
+    let first_byte = _mm_shuffle_epi8(shift, broadcast_mask);
+    shift = _mm_shuffle_epi8(shift, _mm_add_epi8(asc_one, first_byte));
+    lens = _mm_or_si128(lens, _mm_and_si128(first_byte, window_small));
+    window_small = _mm_bslli_si128(window_small, 1);
+
+    // 4
+    let first_byte = _mm_shuffle_epi8(shift, broadcast_mask);
+    shift = _mm_shuffle_epi8(shift, _mm_add_epi8(asc_one, first_byte));
+    lens = _mm_or_si128(lens, _mm_and_si128(first_byte, window_small));
+    window_small = _mm_bslli_si128(window_small, 1);
+
+    // 5
+    let first_byte = _mm_shuffle_epi8(shift, broadcast_mask);
+    shift = _mm_shuffle_epi8(shift, _mm_add_epi8(asc_one, first_byte));
+    lens = _mm_or_si128(lens, _mm_and_si128(first_byte, window_small));
+    window_small = _mm_bslli_si128(window_small, 1);
+
+    // 6
+    let first_byte = _mm_shuffle_epi8(shift, broadcast_mask);
+    shift = _mm_shuffle_epi8(shift, _mm_add_epi8(asc_one, first_byte));
+    lens = _mm_or_si128(lens, _mm_and_si128(first_byte, window_small));
+    window_small = _mm_bslli_si128(window_small, 1);
+
+    // 7
+    let first_byte = _mm_shuffle_epi8(shift, broadcast_mask);
+    // shift = _mm_shuffle_epi8(shift, _mm_add_epi8(asc_one, first_byte));
+    lens = _mm_or_si128(lens, _mm_and_si128(first_byte, window_small));
+    // window_small = _mm_bslli_si128(window_small, 1);
+
+    // Construct the shuffle
+
+    let lens_invert = _mm_sub_epi8(ones, lens);
+    let mut cumul_lens = _mm_add_epi8(lens_invert, _mm_bslli_si128(lens_invert, 1));
+    cumul_lens = _mm_add_epi8(cumul_lens, _mm_bslli_si128(cumul_lens, 2));
+    cumul_lens = _mm_add_epi8(cumul_lens, _mm_bslli_si128(cumul_lens, 4));
+    cumul_lens = _mm_add_epi8(cumul_lens, _mm_bslli_si128(cumul_lens, 8));
+
+    let cumul_lens_2: [u8; 16] = std::mem::transmute(cumul_lens);
+    let last_len = 8 - cumul_lens_2[7] + 8;
+
+    // Set one-lengthed second bytes to negative
+    let second = _mm_shuffle_epi8(
+        _mm_add_epi8(lens, ones),
+        _mm_setr_epi8(-1, 0, -1, 1, -1, 2, -1, 3, -1, 4, -1, 5, -1, 6, -1, 7),
+    );
+
+    let shuf_pt1 = _mm_or_si128(ascend, _mm_cmpeq_epi8(second, ones));
+
+    // Subtract the cumulative sum of zero-lengths to adjust the indexes
+    let x_shuf = _mm_shuffle_epi8(
+        _mm_bslli_si128(cumul_lens, 1),
+        _mm_setr_epi8(0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7),
+    );
+
+    let shuf = _mm_sub_epi8(shuf_pt1, x_shuf);
+    let comb = _mm_shuffle_epi8(b, shuf);
+
+    let x = _mm_or_si128(
+        _mm_and_si128(comb, _mm_set1_epi16(0x0000007f)),
+        _mm_srli_epi16(_mm_and_si128(comb, _mm_set1_epi16(0x00000100)), 1),
+    );
+
+    let shuf = _mm_shuffle_epi8(
+        x,
+        _mm_setr_epi8(0, 2, 4, 6, 8, 10, 12, 14, -1, -1, -1, -1, -1, -1, -1, -1),
+    );
+    let lower: [u64; 2] = std::mem::transmute(shuf);
+    let nums = std::mem::transmute(lower[0]);
+
+    (nums, last_len)
 }

@@ -34,3 +34,6 @@ rustc_version = "0.3.0"
 [[bench]]
 name = "varint_bench"
 harness = false
+
+[profile.release]
+lto = "thin"

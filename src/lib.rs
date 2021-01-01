@@ -52,7 +52,9 @@ impl std::error::Error for VarIntDecodeError {}
 
 #[cfg(test)]
 mod tests {
-    use crate::{decode, decode_four_unsafe, decode_two_unsafe, encode, VarIntTarget};
+    use crate::{
+        decode, decode_eight_u8_unsafe, decode_four_unsafe, decode_two_unsafe, encode, VarIntTarget,
+    };
 
     #[test]
     fn it_works() {
@@ -216,6 +218,21 @@ mod tests {
             decode_four_unsafe::<u16, u16, u16, u16>(
                 [
                     0x01, 0x82, 0x01, 0x83, 0x80, 0x01, 0x84, 0x80, 0x01, 0, 0, 0, 0, 0, 0,
+                ]
+                .as_ptr(),
+            )
+        };
+
+        println!("{:?}", result);
+    }
+
+    #[test]
+    fn test_eight() {
+        let result = unsafe {
+            decode_eight_u8_unsafe(
+                [
+                    0x80, 0x01, 0x80, 0x01, 0x01, 0x90, 0x01, 0x01, 0x01, 0x02, 0x90, 0x01, 0, 0,
+                    0, 0, 0, 0, 0, 0,
                 ]
                 .as_ptr(),
             )

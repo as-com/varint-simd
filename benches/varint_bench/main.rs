@@ -1,10 +1,10 @@
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion, Throughput};
 use integer_encoding::VarInt;
 use rand::distributions::{Distribution, Standard};
-use rand::prelude::ThreadRng;
 use rand::{thread_rng, Rng};
 use varint_simd::{
-    decode, decode_four_unsafe, decode_two_unsafe, decode_two_wide_unsafe, decode_unsafe, encode,
+    decode, decode_eight_u8_unsafe, decode_four_unsafe, decode_two_unsafe, decode_two_wide_unsafe,
+    decode_unsafe, encode,
 };
 
 mod leb128;
@@ -73,6 +73,40 @@ where
     }
 }
 
+fn create_octuple_encoded_generator<R: Rng>(rng: &mut R) -> impl FnMut() -> [u8; 16] + '_ {
+    move || {
+        let mut encoded = [0; 16];
+        let first_len = rng.gen::<u8>().encode_var(&mut encoded);
+        let second_len = rng.gen::<u8>().encode_var(&mut encoded[first_len..]);
+        let third_len = rng
+            .gen::<u8>()
+            .encode_var(&mut encoded[first_len + second_len..]);
+        let fourth_len = rng
+            .gen::<u8>()
+            .encode_var(&mut encoded[first_len + second_len + third_len..]);
+        let fifth_len = rng
+            .gen::<u8>()
+            .encode_var(&mut encoded[first_len + second_len + third_len + fourth_len..]);
+        let sixth_len = rng.gen::<u8>().encode_var(
+            &mut encoded[first_len + second_len + third_len + fourth_len + fifth_len..],
+        );
+        let seventh_len = rng.gen::<u8>().encode_var(
+            &mut encoded[first_len + second_len + third_len + fourth_len + fifth_len + sixth_len..],
+        );
+        rng.gen::<u8>().encode_var(
+            &mut encoded[first_len
+                + second_len
+                + third_len
+                + fourth_len
+                + fifth_len
+                + sixth_len
+                + seventh_len..],
+        );
+
+        encoded
+    }
+}
+
 fn create_encoded_vec_generator<T: VarInt, R: Rng>(rng: &mut R) -> impl FnMut() -> Vec<u8> + '_
 where
     Standard: Distribution<T>,
@@ -125,6 +159,14 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         b.iter_batched_ref(
             create_encoded_generator::<u8, _>(&mut rng),
             |encoded| decode::<u8>(encoded).unwrap().0,
+            BatchSize::SmallInput,
+        )
+    });
+
+    group.bench_function("varint-simd/8x/unsafe", |b| {
+        b.iter_batched_ref(
+            create_octuple_encoded_generator(&mut rng),
+            |encoded| unsafe { decode_eight_u8_unsafe(encoded.as_ptr()).0 },
             BatchSize::SmallInput,
         )
     });
