@@ -126,7 +126,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     group.bench_function("integer-encoding", |b| {
         b.iter_batched_ref(
             create_encoded_generator::<u8, _>(&mut rng),
-            |encoded| u8::decode_var(encoded).unwrap().0,
+            |encoded| u8::decode_var(encoded).unwrap(),
             BatchSize::SmallInput,
         )
     });
@@ -134,7 +134,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     group.bench_function("rustc", |b| {
         b.iter_batched_ref(
             create_encoded_generator::<u8, _>(&mut rng),
-            |encoded| leb128::read_u16_leb128(encoded).0,
+            |encoded| leb128::read_u16_leb128(encoded),
             BatchSize::SmallInput,
         )
     });
@@ -150,7 +150,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     group.bench_function("varint-simd/unsafe", |b| {
         b.iter_batched_ref(
             create_encoded_generator::<u8, _>(&mut rng),
-            |encoded| unsafe { decode_unsafe::<u8>(encoded.as_ptr()).0 },
+            |encoded| unsafe { decode_unsafe::<u8>(encoded.as_ptr()) },
             BatchSize::SmallInput,
         )
     });
@@ -158,15 +158,34 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     group.bench_function("varint-simd/safe", |b| {
         b.iter_batched_ref(
             create_encoded_generator::<u8, _>(&mut rng),
-            |encoded| decode::<u8>(encoded).unwrap().0,
+            |encoded| decode::<u8>(encoded).unwrap(),
             BatchSize::SmallInput,
         )
     });
 
+    group.throughput(Throughput::Elements(2));
+    group.bench_function("varint-simd/2x/unsafe", |b| {
+        b.iter_batched_ref(
+            create_double_encoded_generator::<u8, u8, _>(&mut rng),
+            |encoded| unsafe { decode_two_unsafe::<u8, u8>(encoded.as_ptr()) },
+            BatchSize::SmallInput,
+        )
+    });
+
+    group.throughput(Throughput::Elements(4));
+    group.bench_function("varint-simd/4x/unsafe", |b| {
+        b.iter_batched_ref(
+            create_quad_encoded_generator::<u8, u8, u8, u8, _>(&mut rng),
+            |encoded| unsafe { decode_four_unsafe::<u8, u8, u8, u8>(encoded.as_ptr()) },
+            BatchSize::SmallInput,
+        )
+    });
+
+    group.throughput(Throughput::Elements(8));
     group.bench_function("varint-simd/8x/unsafe", |b| {
         b.iter_batched_ref(
             create_octuple_encoded_generator(&mut rng),
-            |encoded| unsafe { decode_eight_u8_unsafe(encoded.as_ptr()).0 },
+            |encoded| unsafe { decode_eight_u8_unsafe(encoded.as_ptr()) },
             BatchSize::SmallInput,
         )
     });
@@ -219,7 +238,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     group.bench_function("integer-encoding", |b| {
         b.iter_batched_ref(
             create_encoded_generator::<u16, _>(&mut rng),
-            |encoded| u16::decode_var(encoded).unwrap().0,
+            |encoded| u16::decode_var(encoded).unwrap(),
             BatchSize::SmallInput,
         )
     });
@@ -227,7 +246,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     group.bench_function("rustc", |b| {
         b.iter_batched_ref(
             create_encoded_generator::<u16, _>(&mut rng),
-            |encoded| leb128::read_u16_leb128(encoded).0,
+            |encoded| leb128::read_u16_leb128(encoded),
             BatchSize::SmallInput,
         )
     });
@@ -243,7 +262,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     group.bench_function("varint-simd/unsafe", |b| {
         b.iter_batched_ref(
             create_encoded_generator::<u16, _>(&mut rng),
-            |encoded| unsafe { decode_unsafe::<u16>(encoded.as_ptr()).0 },
+            |encoded| unsafe { decode_unsafe::<u16>(encoded.as_ptr()) },
             BatchSize::SmallInput,
         )
     });
@@ -251,11 +270,21 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     group.bench_function("varint-simd/safe", |b| {
         b.iter_batched_ref(
             create_encoded_generator::<u16, _>(&mut rng),
-            |encoded| decode::<u16>(encoded).unwrap().0,
+            |encoded| decode::<u16>(encoded).unwrap(),
             BatchSize::SmallInput,
         )
     });
 
+    group.throughput(Throughput::Elements(2));
+    group.bench_function("varint-simd/2x/unsafe", |b| {
+        b.iter_batched_ref(
+            create_double_encoded_generator::<u16, u16, _>(&mut rng),
+            |encoded| unsafe { decode_two_unsafe::<u16, u16>(encoded.as_ptr()) },
+            BatchSize::SmallInput,
+        )
+    });
+
+    group.throughput(Throughput::Elements(4));
     group.bench_function("varint-simd/4x/unsafe", |b| {
         b.iter_batched_ref(
             create_quad_encoded_generator::<u16, u16, u16, u16, _>(&mut rng),
@@ -317,7 +346,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     group.bench_function("integer-encoding", |b| {
         b.iter_batched_ref(
             create_encoded_generator::<u32, _>(&mut rng),
-            |encoded| u32::decode_var(encoded).unwrap().0,
+            |encoded| u32::decode_var(encoded).unwrap(),
             BatchSize::SmallInput,
         )
     });
@@ -325,7 +354,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     group.bench_function("rustc", |b| {
         b.iter_batched_ref(
             create_encoded_generator::<u32, _>(&mut rng),
-            |encoded| leb128::read_u32_leb128(encoded).0,
+            |encoded| leb128::read_u32_leb128(encoded),
             BatchSize::SmallInput,
         )
     });
@@ -341,7 +370,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     group.bench_function("varint-simd/unsafe", |b| {
         b.iter_batched_ref(
             create_encoded_generator::<u32, _>(&mut rng),
-            |encoded| unsafe { decode_unsafe::<u32>(encoded.as_ptr()).0 },
+            |encoded| unsafe { decode_unsafe::<u32>(encoded.as_ptr()) },
             BatchSize::SmallInput,
         )
     });
@@ -349,15 +378,25 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     group.bench_function("varint-simd/safe", |b| {
         b.iter_batched_ref(
             create_encoded_generator::<u32, _>(&mut rng),
-            |encoded| decode::<u32>(encoded).unwrap().0,
+            |encoded| decode::<u32>(encoded).unwrap(),
             BatchSize::SmallInput,
         )
     });
 
+    group.throughput(Throughput::Elements(2));
     group.bench_function("varint-simd/2x/unsafe", |b| {
         b.iter_batched_ref(
             create_double_encoded_generator::<u32, u32, _>(&mut rng),
             |encoded| unsafe { decode_two_unsafe::<u32, u32>(encoded.as_ptr()) },
+            BatchSize::SmallInput,
+        )
+    });
+
+    group.throughput(Throughput::Elements(4));
+    group.bench_function("varint-simd/4x/unsafe", |b| {
+        b.iter_batched_ref(
+            create_quad_encoded_generator::<u32, u32, u32, u32, _>(&mut rng),
+            |encoded| unsafe { decode_four_unsafe::<u32, u32, u32, u32>(encoded.as_ptr()) },
             BatchSize::SmallInput,
         )
     });
@@ -414,7 +453,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     group.bench_function("integer-encoding", |b| {
         b.iter_batched_ref(
             create_encoded_generator::<u64, _>(&mut rng),
-            |encoded| u64::decode_var(encoded).unwrap().0,
+            |encoded| u64::decode_var(encoded).unwrap(),
             BatchSize::SmallInput,
         )
     });
@@ -422,7 +461,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     group.bench_function("rustc", |b| {
         b.iter_batched_ref(
             create_encoded_generator::<u64, _>(&mut rng),
-            |encoded| leb128::read_u64_leb128(encoded).0,
+            |encoded| leb128::read_u64_leb128(encoded),
             BatchSize::SmallInput,
         )
     });
@@ -438,7 +477,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     group.bench_function("varint-simd/unsafe", |b| {
         b.iter_batched_ref(
             create_encoded_generator::<u64, _>(&mut rng),
-            |encoded| unsafe { decode_unsafe::<u64>(encoded.as_ptr()).0 },
+            |encoded| unsafe { decode_unsafe::<u64>(encoded.as_ptr()) },
             BatchSize::SmallInput,
         )
     });
@@ -446,7 +485,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     group.bench_function("varint-simd/safe", |b| {
         b.iter_batched_ref(
             create_encoded_generator::<u64, _>(&mut rng),
-            |encoded| decode::<u64>(encoded).unwrap().0,
+            |encoded| decode::<u64>(encoded).unwrap(),
             BatchSize::SmallInput,
         )
     });
@@ -455,8 +494,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         b.iter_batched_ref(
             create_double_encoded_generator_wide::<u64, u64, _>(&mut rng),
             |encoded| unsafe {
-                let result = decode_two_wide_unsafe::<u64, u64>(encoded.as_ptr());
-                (result.0, result.2)
+                decode_two_wide_unsafe::<u64, u64>(encoded.as_ptr())
             },
             BatchSize::SmallInput,
         )
