@@ -20,6 +20,10 @@ jobs:
   test:
     name: Test Suite
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        target_cpu: [penryn, znver1, native]
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
@@ -27,9 +31,17 @@ jobs:
           profile: minimal
           toolchain: stable
           override: true
+      - name: "Set env"
+        run: |
+          if [ ${{ matrix.target_cpu }} = "native" ]; then
+            echo "CARGO_EXTRA_ARGS='--features native-optimizations" >> $GITHUB_ENV
+          fi
       - uses: actions-rs/cargo@v1
+        env:
+          RUSTFLAGS: "-C target-cpu=${{ matrix.target_cpu }}"
         with:
           command: test
+          args: "${{ env.CARGO_EXTRA_ARGS }}"
 
   fmt:
     name: Rustfmt
