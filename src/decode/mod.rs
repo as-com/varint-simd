@@ -69,7 +69,8 @@ pub fn decode_zigzag<T: SignedVarIntTarget>(bytes: &[u8]) -> Result<(T, u8), Var
     decode::<T::Unsigned>(bytes).map(|r| (r.0.unzigzag(), r.1))
 }
 
-/// Decodes a single varint from the input pointer. Requires SSSE3 support.
+/// Decodes a single varint from the input pointer. Requires SSSE3 support. Returns a tuple
+/// containing the decoded number and the number of bytes read.
 ///
 /// # Safety
 /// There must be at least 16 bytes of allocated memory after the beginning of the pointer.
@@ -120,6 +121,9 @@ pub unsafe fn decode_unsafe<T: VarIntTarget>(bytes: *const u8) -> (T, u8) {
 ///
 /// For example, it is permissible to decode `u32` and `u32`, and `u64` and `u32`, but it is not
 /// possible to decode two `u64` values with this function simultaneously.
+///
+/// Returns a tuple containing the two decoded values and the two lengths of bytes read for each
+/// value.
 ///
 /// For best performance, ensure each target type is `u32` or smaller.
 ///
@@ -311,10 +315,13 @@ unsafe fn dual_u32_stage2(comb: __m128i) -> __m128i {
 /// decoding a pair of `u64` values. For smaller values, the non-wide variation of this function
 /// will probably be faster.
 ///
+/// Returns a tuple containing the two decoded values and the two lengths of bytes read for each
+/// value.
+///
 /// # Safety
 /// There must be at least 32 bytes of allocated memory after the beginning of the pointer.
 /// Otherwise, there may be undefined behavior. Calling code should ensure that AVX2 is supported
-/// before calling this function.
+/// before referencing this function.
 #[inline]
 #[cfg(any(target_feature = "avx2", doc))]
 #[cfg_attr(rustc_nightly, doc(cfg(target_feature = "avx2")))]
@@ -351,7 +358,7 @@ pub unsafe fn decode_two_wide_unsafe<T: VarIntTarget, U: VarIntTarget>(
     let shuf_added = _mm256_add_epi8(shuf_gen, shuf_add);
     let shuf = _mm256_or_si256(
         shuf_added,
-        _mm256_cmpgt_epi8(shuf_added, _mm256_set1_epi8(15)),
+        _mm256_cmpgt_epi8(shuf_added, _mm256_set1_epi8(15)), // TODO: Is this really necessary?
     );
     let shuffled = _mm256_shuffle_epi8(b, shuf);
 
@@ -430,7 +437,7 @@ pub unsafe fn decode_two_wide_unsafe<T: VarIntTarget, U: VarIntTarget>(
         let x = _mm_or_si128(x_lo, x_hi);
 
         first_num = T::cast_u64(_mm_extract_epi64(x, 0) as u64);
-        second_num = U::cast_u64(_mm_extract_epi64(x, 2) as u64);
+        second_num = U::cast_u64(_mm_extract_epi64(x, 1) as u64);
     } else {
         first_num = T::vector_to_num(std::mem::transmute(first));
         second_num = U::vector_to_num(std::mem::transmute(second));
@@ -441,6 +448,10 @@ pub unsafe fn decode_two_wide_unsafe<T: VarIntTarget, U: VarIntTarget>(
 
 /// Decodes four varints simultaneously. Target types must fit within 16 bytes when varint encoded.
 /// Requires SSSE3 support.
+///
+/// Returns a tuple containing the four encoded values, followed by the number of bytes read for
+/// each encoded value, followed by a boolean indicator for whether the length values may be
+/// incorrect due to overflow.
 ///
 /// For best performance, ensure each target type is `u16` or smaller.
 ///
@@ -540,7 +551,11 @@ pub unsafe fn decode_four_unsafe<
             _mm_or_si128(_mm_bslli_si128(third, 8), _mm_bslli_si128(fourth, 12)),
         );
 
-        let x = if T::MAX_VARINT_BYTES <= 2 && U::MAX_VARINT_BYTES <= 2 {
+        let x = if T::MAX_VARINT_BYTES <= 2
+            && U::MAX_VARINT_BYTES <= 2
+            && V::MAX_VARINT_BYTES <= 2
+            && W::MAX_VARINT_BYTES <= 2
+        {
             _mm_or_si128(
                 _mm_and_si128(comb, _mm_set1_epi32(0x0000007f)),
                 _mm_srli_epi32(_mm_and_si128(comb, _mm_set1_epi32(0x00000100)), 1),
@@ -583,6 +598,7 @@ pub unsafe fn decode_four_unsafe<
 
 #[inline]
 #[cfg(any(target_feature = "ssse3", doc))]
+#[cfg_attr(rustc_nightly, doc(cfg(target_feature = "ssse3")))]
 unsafe fn decode_four_u16_unsafe<
     T: VarIntTarget,
     U: VarIntTarget,
@@ -622,7 +638,11 @@ unsafe fn decode_four_u16_unsafe<
     if should_turbo {
         // const, so optimized out
 
-        let x = if T::MAX_VARINT_BYTES <= 2 && U::MAX_VARINT_BYTES <= 2 {
+        let x = if T::MAX_VARINT_BYTES <= 2
+            && U::MAX_VARINT_BYTES <= 2
+            && V::MAX_VARINT_BYTES <= 2
+            && W::MAX_VARINT_BYTES <= 2
+        {
             _mm_or_si128(
                 _mm_and_si128(comb, _mm_set1_epi32(0x0000007f)),
                 _mm_srli_epi32(_mm_and_si128(comb, _mm_set1_epi32(0x00000100)), 1),
@@ -663,7 +683,19 @@ unsafe fn decode_four_u16_unsafe<
     )
 }
 
-/// Decode eight varints up to size u8 at once.
+/// Decodes four varints into u8's simultaneously. Requires SSSE3 support. **Does not perform
+/// overflow checking and may produce incorrect output.**
+///
+/// Returns a tuple containing an array of decoded values, and the total number of bytes read.
+///
+/// # Safety
+/// There must be at least 16 bytes of allocated memory after the start of the pointer. Otherwise,
+/// there may be undefined behavior. Truncated values will be returned if the varint represents
+/// a number larger than what a u8 can handle.
+///
+/// This function does not perform overflow checking. If a varint exceeds two bytes in encoded
+/// length, it may be interpreted as multiple varints, and the reported length of data read will
+/// be shorter than expected. Caution is encouraged when using this function.
 #[inline]
 #[cfg(any(target_feature = "ssse3", doc))]
 pub unsafe fn decode_eight_u8_unsafe(bytes: *const u8) -> ([u8; 8], u8) {

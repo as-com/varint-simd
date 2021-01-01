@@ -27,6 +27,7 @@ criterion = "0.3"
 integer-encoding = "2.1"
 rand = "0.8"
 bytes = "1" # prost-varint
+lazy_static = "1.4.0"
 
 [build-dependencies]
 rustc_version = "0.3.0"

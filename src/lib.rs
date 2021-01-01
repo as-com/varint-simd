@@ -52,9 +52,14 @@ impl std::error::Error for VarIntDecodeError {}
 
 #[cfg(test)]
 mod tests {
+    #[cfg(any(target_feature = "avx2"))]
+    use crate::decode_two_wide_unsafe;
     use crate::{
-        decode, decode_eight_u8_unsafe, decode_four_unsafe, decode_two_unsafe, encode, VarIntTarget,
+        decode, decode_eight_u8_unsafe, decode_four_unsafe, decode_two_unsafe, encode,
+        encode_to_slice, VarIntTarget,
     };
+
+    use lazy_static::lazy_static;
 
     #[test]
     fn it_works() {
@@ -198,46 +203,665 @@ mod tests {
             .expect_err("should overflow");
     }
 
-    #[test]
-    fn test_two() {
-        // let result = unsafe { decode_two_unsafe::<u32, u32>([0x80, 0x80, 0x80, 0x80, 0x01, 0x80, 0x80, 0x80, 0x80, 0x01, 0, 0, 0, 0, 0, 0].as_ptr()) };
-        let result = unsafe {
-            decode_two_unsafe::<u8, u8>(
-                [
-                    0x80, 0x01, 0x70, 0x01, 0x01, 0x80, 0x80, 0x80, 0x80, 0x01, 0, 0, 0, 0, 0, 0,
-                ]
-                .as_ptr(),
-            )
-        };
-        println!("{:?}", result);
+    fn check_decode_2x<T: VarIntTarget, U: VarIntTarget>(a: &[T], b: &[U]) {
+        for i in a {
+            for j in b {
+                let mut enc = [0u8; 16];
+
+                let first_len = encode_to_slice(*i, &mut enc);
+                let second_len = encode_to_slice(*j, &mut enc[first_len as usize..]);
+
+                let decoded = unsafe { decode_two_unsafe::<T, U>(enc.as_ptr()) };
+                assert_eq!(decoded.0, *i);
+                assert_eq!(decoded.1, *j);
+                assert_eq!(decoded.2, first_len);
+                assert_eq!(decoded.3, second_len);
+            }
+        }
+    }
+
+    #[cfg(any(target_feature = "avx2"))]
+    fn check_decode_wide_2x<T: VarIntTarget, U: VarIntTarget>(a: &[T], b: &[U]) {
+        for i in a {
+            for j in b {
+                let mut enc = [0u8; 32];
+
+                let first_len = encode_to_slice(*i, &mut enc);
+                let second_len = encode_to_slice(*j, &mut enc[first_len as usize..]);
+
+                let decoded = unsafe { decode_two_wide_unsafe::<T, U>(enc.as_ptr()) };
+                assert_eq!(decoded.0, *i);
+                assert_eq!(decoded.1, *j);
+                assert_eq!(decoded.2, first_len);
+                assert_eq!(decoded.3, second_len);
+            }
+        }
+    }
+
+    fn check_decode_4x<T: VarIntTarget, U: VarIntTarget, V: VarIntTarget, W: VarIntTarget>(
+        a: &[T],
+        b: &[U],
+        c: &[V],
+        d: &[W],
+    ) {
+        for i in a {
+            for j in b {
+                for k in c {
+                    for l in d {
+                        let mut enc = [0u8; 16];
+
+                        let first_len = encode_to_slice(*i, &mut enc);
+                        let second_len = encode_to_slice(*j, &mut enc[first_len as usize..]);
+                        let third_len =
+                            encode_to_slice(*k, &mut enc[(first_len + second_len) as usize..]);
+                        let fourth_len = encode_to_slice(
+                            *l,
+                            &mut enc[(first_len + second_len + third_len) as usize..],
+                        );
+
+                        let decoded = unsafe { decode_four_unsafe::<T, U, V, W>(enc.as_ptr()) };
+
+                        assert_eq!(decoded.0, *i);
+                        assert_eq!(decoded.1, *j);
+                        assert_eq!(decoded.2, *k);
+                        assert_eq!(decoded.3, *l);
+                        assert_eq!(decoded.4, first_len);
+                        assert_eq!(decoded.5, second_len);
+                        assert_eq!(decoded.6, third_len);
+                        assert_eq!(decoded.7, fourth_len);
+                        assert_eq!(decoded.8, false);
+                    }
+                }
+            }
+        }
+    }
+
+    lazy_static! {
+        static ref NUMS_U8: [u8; 5] = [
+            2u8.pow(0) - 1,
+            2u8.pow(0),
+            2u8.pow(7) - 1,
+            2u8.pow(7),
+            u8::MAX
+        ];
+        static ref NUMS_U16: [u16; 8] = [
+            2u16.pow(0) - 1,
+            2u16.pow(0),
+            2u16.pow(7) - 1,
+            2u16.pow(7),
+            300,
+            2u16.pow(14) - 1,
+            2u16.pow(14),
+            u16::MAX
+        ];
+        static ref NUMS_U32: [u32; 12] = [
+            2u32.pow(0) - 1,
+            2u32.pow(0),
+            2u32.pow(7) - 1,
+            2u32.pow(7),
+            300,
+            2u32.pow(14) - 1,
+            2u32.pow(14),
+            2u32.pow(21) - 1,
+            2u32.pow(21),
+            2u32.pow(28) - 1,
+            2u32.pow(28),
+            u32::MAX
+        ];
+        static ref NUMS_U64: [u64; 22] = [
+            2u64.pow(0) - 1,
+            2u64.pow(0),
+            2u64.pow(7) - 1,
+            2u64.pow(7),
+            300,
+            2u64.pow(14) - 1,
+            2u64.pow(14),
+            2u64.pow(21) - 1,
+            2u64.pow(21),
+            2u64.pow(28) - 1,
+            2u64.pow(28),
+            2u64.pow(35) - 1,
+            2u64.pow(35),
+            2u64.pow(42) - 1,
+            2u64.pow(42),
+            2u64.pow(49) - 1,
+            2u64.pow(49),
+            2u64.pow(56) - 1,
+            2u64.pow(56),
+            2u64.pow(63) - 1,
+            2u64.pow(63),
+            u64::MAX
+        ];
     }
 
     #[test]
-    fn test_four() {
-        let result = unsafe {
-            decode_four_unsafe::<u16, u16, u16, u16>(
-                [
-                    0x01, 0x82, 0x01, 0x83, 0x80, 0x01, 0x84, 0x80, 0x01, 0, 0, 0, 0, 0, 0,
-                ]
-                .as_ptr(),
-            )
-        };
-
-        println!("{:?}", result);
+    fn test_decode_2x_u8_x() {
+        check_decode_2x::<u8, u8>(&NUMS_U8[..], &NUMS_U8[..]);
+        check_decode_2x::<u8, u16>(&NUMS_U8[..], &NUMS_U16[..]);
+        check_decode_2x::<u8, u32>(&NUMS_U8[..], &NUMS_U32[..]);
+        check_decode_2x::<u8, u64>(&NUMS_U8[..], &NUMS_U64[..]);
     }
 
     #[test]
-    fn test_eight() {
-        let result = unsafe {
-            decode_eight_u8_unsafe(
-                [
-                    0x80, 0x01, 0x80, 0x01, 0x01, 0x90, 0x01, 0x01, 0x01, 0x02, 0x90, 0x01, 0, 0,
-                    0, 0, 0, 0, 0, 0,
-                ]
-                .as_ptr(),
-            )
-        };
-
-        println!("{:?}", result);
+    #[cfg(any(target_feature = "avx2"))]
+    fn test_decode_2x_wide_u8_x() {
+        check_decode_wide_2x::<u8, u8>(&NUMS_U8[..], &NUMS_U8[..]);
+        check_decode_wide_2x::<u8, u16>(&NUMS_U8[..], &NUMS_U16[..]);
+        check_decode_wide_2x::<u8, u32>(&NUMS_U8[..], &NUMS_U32[..]);
+        check_decode_wide_2x::<u8, u64>(&NUMS_U8[..], &NUMS_U64[..]);
     }
+
+    #[test]
+    fn test_decode_2x_u16_x() {
+        check_decode_2x::<u16, u8>(&NUMS_U16[..], &NUMS_U8[..]);
+        check_decode_2x::<u16, u16>(&NUMS_U16[..], &NUMS_U16[..]);
+        check_decode_2x::<u16, u32>(&NUMS_U16[..], &NUMS_U32[..]);
+        check_decode_2x::<u16, u64>(&NUMS_U16[..], &NUMS_U64[..]);
+    }
+
+    #[test]
+    #[cfg(any(target_feature = "avx2"))]
+    fn test_decode_2x_wide_u16_x() {
+        check_decode_wide_2x::<u16, u8>(&NUMS_U16[..], &NUMS_U8[..]);
+        check_decode_wide_2x::<u16, u16>(&NUMS_U16[..], &NUMS_U16[..]);
+        check_decode_wide_2x::<u16, u32>(&NUMS_U16[..], &NUMS_U32[..]);
+        check_decode_wide_2x::<u16, u64>(&NUMS_U16[..], &NUMS_U64[..]);
+    }
+
+    #[test]
+    fn test_decode_2x_u32_x() {
+        check_decode_2x::<u32, u8>(&NUMS_U32[..], &NUMS_U8[..]);
+        check_decode_2x::<u32, u16>(&NUMS_U32[..], &NUMS_U16[..]);
+        check_decode_2x::<u32, u32>(&NUMS_U32[..], &NUMS_U32[..]);
+        check_decode_2x::<u32, u64>(&NUMS_U32[..], &NUMS_U64[..]);
+    }
+
+    #[test]
+    #[cfg(any(target_feature = "avx2"))]
+    fn test_decode_2x_wide_u32_x() {
+        check_decode_wide_2x::<u32, u8>(&NUMS_U32[..], &NUMS_U8[..]);
+        check_decode_wide_2x::<u32, u16>(&NUMS_U32[..], &NUMS_U16[..]);
+        check_decode_wide_2x::<u32, u32>(&NUMS_U32[..], &NUMS_U32[..]);
+        check_decode_wide_2x::<u32, u64>(&NUMS_U32[..], &NUMS_U64[..]);
+    }
+
+    #[test]
+    fn test_decode_2x_u64_x() {
+        check_decode_2x::<u64, u8>(&NUMS_U64[..], &NUMS_U8[..]);
+        check_decode_2x::<u64, u16>(&NUMS_U64[..], &NUMS_U16[..]);
+        check_decode_2x::<u64, u32>(&NUMS_U64[..], &NUMS_U32[..]);
+        // check_decode_2x::<u64, u64>(&NUMS_U64[..], &NUMS_U64[..]);
+    }
+
+    #[test]
+    #[cfg(any(target_feature = "avx2"))]
+    fn test_decode_2x_wide_u64_x() {
+        check_decode_wide_2x::<u64, u8>(&NUMS_U64[..], &NUMS_U8[..]);
+        check_decode_wide_2x::<u64, u16>(&NUMS_U64[..], &NUMS_U16[..]);
+        check_decode_wide_2x::<u64, u32>(&NUMS_U64[..], &NUMS_U32[..]);
+        check_decode_wide_2x::<u64, u64>(&NUMS_U64[..], &NUMS_U64[..]);
+    }
+
+    #[test]
+    fn test_decode_4x_u8_u8_x_x() {
+        check_decode_4x::<u8, u8, u8, u8>(&NUMS_U8[..], &NUMS_U8[..], &NUMS_U8[..], &NUMS_U8[..]);
+        check_decode_4x::<u8, u8, u8, u16>(&NUMS_U8[..], &NUMS_U8[..], &NUMS_U8[..], &NUMS_U16[..]);
+        check_decode_4x::<u8, u8, u8, u32>(&NUMS_U8[..], &NUMS_U8[..], &NUMS_U8[..], &NUMS_U32[..]);
+        check_decode_4x::<u8, u8, u8, u64>(&NUMS_U8[..], &NUMS_U8[..], &NUMS_U8[..], &NUMS_U64[..]);
+
+        check_decode_4x::<u8, u8, u16, u8>(&NUMS_U8[..], &NUMS_U8[..], &NUMS_U16[..], &NUMS_U8[..]);
+        check_decode_4x::<u8, u8, u16, u16>(
+            &NUMS_U8[..],
+            &NUMS_U8[..],
+            &NUMS_U16[..],
+            &NUMS_U16[..],
+        );
+        check_decode_4x::<u8, u8, u16, u32>(
+            &NUMS_U8[..],
+            &NUMS_U8[..],
+            &NUMS_U16[..],
+            &NUMS_U32[..],
+        );
+    }
+
+    #[test]
+    fn test_decode_4x_u8_u16_x_x() {
+        check_decode_4x::<u8, u16, u8, u8>(&NUMS_U8[..], &NUMS_U16[..], &NUMS_U8[..], &NUMS_U8[..]);
+        check_decode_4x::<u8, u16, u8, u16>(
+            &NUMS_U8[..],
+            &NUMS_U16[..],
+            &NUMS_U8[..],
+            &NUMS_U16[..],
+        );
+        check_decode_4x::<u8, u16, u8, u32>(
+            &NUMS_U8[..],
+            &NUMS_U16[..],
+            &NUMS_U8[..],
+            &NUMS_U32[..],
+        );
+
+        check_decode_4x::<u8, u16, u16, u8>(
+            &NUMS_U8[..],
+            &NUMS_U16[..],
+            &NUMS_U16[..],
+            &NUMS_U8[..],
+        );
+        check_decode_4x::<u8, u16, u16, u16>(
+            &NUMS_U8[..],
+            &NUMS_U16[..],
+            &NUMS_U16[..],
+            &NUMS_U16[..],
+        );
+        check_decode_4x::<u8, u16, u16, u32>(
+            &NUMS_U8[..],
+            &NUMS_U16[..],
+            &NUMS_U16[..],
+            &NUMS_U32[..],
+        );
+    }
+
+    #[test]
+    fn test_decode_4x_u8_u32_x_x() {
+        check_decode_4x::<u8, u32, u8, u8>(&NUMS_U8[..], &NUMS_U32[..], &NUMS_U8[..], &NUMS_U8[..]);
+        check_decode_4x::<u8, u32, u8, u16>(
+            &NUMS_U8[..],
+            &NUMS_U32[..],
+            &NUMS_U8[..],
+            &NUMS_U16[..],
+        );
+        check_decode_4x::<u8, u32, u8, u32>(
+            &NUMS_U8[..],
+            &NUMS_U32[..],
+            &NUMS_U8[..],
+            &NUMS_U32[..],
+        );
+
+        check_decode_4x::<u8, u32, u16, u8>(
+            &NUMS_U8[..],
+            &NUMS_U32[..],
+            &NUMS_U16[..],
+            &NUMS_U8[..],
+        );
+        check_decode_4x::<u8, u32, u16, u16>(
+            &NUMS_U8[..],
+            &NUMS_U32[..],
+            &NUMS_U16[..],
+            &NUMS_U16[..],
+        );
+        check_decode_4x::<u8, u32, u16, u32>(
+            &NUMS_U8[..],
+            &NUMS_U32[..],
+            &NUMS_U16[..],
+            &NUMS_U32[..],
+        );
+    }
+
+    #[test]
+    fn test_decode_4x_u8_u64_x_x() {
+        check_decode_4x::<u8, u64, u8, u8>(&NUMS_U8[..], &NUMS_U64[..], &NUMS_U8[..], &NUMS_U8[..]);
+    }
+
+    #[test]
+    fn test_decode_4x_u16_u8_x_x() {
+        check_decode_4x::<u16, u8, u8, u8>(&NUMS_U16[..], &NUMS_U8[..], &NUMS_U8[..], &NUMS_U8[..]);
+        check_decode_4x::<u16, u8, u8, u16>(
+            &NUMS_U16[..],
+            &NUMS_U8[..],
+            &NUMS_U8[..],
+            &NUMS_U16[..],
+        );
+        check_decode_4x::<u16, u8, u8, u32>(
+            &NUMS_U16[..],
+            &NUMS_U8[..],
+            &NUMS_U8[..],
+            &NUMS_U32[..],
+        );
+
+        check_decode_4x::<u16, u8, u16, u8>(
+            &NUMS_U16[..],
+            &NUMS_U8[..],
+            &NUMS_U16[..],
+            &NUMS_U8[..],
+        );
+        check_decode_4x::<u16, u8, u16, u16>(
+            &NUMS_U16[..],
+            &NUMS_U8[..],
+            &NUMS_U16[..],
+            &NUMS_U16[..],
+        );
+        check_decode_4x::<u16, u8, u16, u32>(
+            &NUMS_U16[..],
+            &NUMS_U8[..],
+            &NUMS_U16[..],
+            &NUMS_U32[..],
+        );
+    }
+
+    #[test]
+    fn test_decode_4x_u16_u16_x_x() {
+        check_decode_4x::<u16, u16, u8, u8>(
+            &NUMS_U16[..],
+            &NUMS_U16[..],
+            &NUMS_U8[..],
+            &NUMS_U8[..],
+        );
+        check_decode_4x::<u16, u16, u8, u16>(
+            &NUMS_U16[..],
+            &NUMS_U16[..],
+            &NUMS_U8[..],
+            &NUMS_U16[..],
+        );
+        check_decode_4x::<u16, u16, u8, u32>(
+            &NUMS_U16[..],
+            &NUMS_U16[..],
+            &NUMS_U8[..],
+            &NUMS_U32[..],
+        );
+
+        check_decode_4x::<u16, u16, u16, u8>(
+            &NUMS_U16[..],
+            &NUMS_U16[..],
+            &NUMS_U16[..],
+            &NUMS_U8[..],
+        );
+        check_decode_4x::<u16, u16, u16, u16>(
+            &NUMS_U16[..],
+            &NUMS_U16[..],
+            &NUMS_U16[..],
+            &NUMS_U16[..],
+        );
+        check_decode_4x::<u16, u16, u16, u32>(
+            &NUMS_U16[..],
+            &NUMS_U16[..],
+            &NUMS_U16[..],
+            &NUMS_U32[..],
+        );
+    }
+
+    #[test]
+    fn test_decode_4x_u16_u32_x_x() {
+        check_decode_4x::<u16, u32, u8, u8>(
+            &NUMS_U16[..],
+            &NUMS_U32[..],
+            &NUMS_U8[..],
+            &NUMS_U8[..],
+        );
+        check_decode_4x::<u16, u32, u8, u16>(
+            &NUMS_U16[..],
+            &NUMS_U32[..],
+            &NUMS_U8[..],
+            &NUMS_U16[..],
+        );
+        check_decode_4x::<u16, u32, u8, u32>(
+            &NUMS_U16[..],
+            &NUMS_U32[..],
+            &NUMS_U8[..],
+            &NUMS_U32[..],
+        );
+
+        check_decode_4x::<u16, u32, u16, u8>(
+            &NUMS_U16[..],
+            &NUMS_U32[..],
+            &NUMS_U16[..],
+            &NUMS_U8[..],
+        );
+        check_decode_4x::<u16, u32, u16, u16>(
+            &NUMS_U16[..],
+            &NUMS_U32[..],
+            &NUMS_U16[..],
+            &NUMS_U16[..],
+        );
+        check_decode_4x::<u16, u32, u16, u32>(
+            &NUMS_U16[..],
+            &NUMS_U32[..],
+            &NUMS_U16[..],
+            &NUMS_U32[..],
+        );
+    }
+
+    #[test]
+    fn test_decode_4x_u32_u8_x_x() {
+        check_decode_4x::<u32, u8, u8, u8>(&NUMS_U32[..], &NUMS_U8[..], &NUMS_U8[..], &NUMS_U8[..]);
+        check_decode_4x::<u32, u8, u8, u16>(
+            &NUMS_U32[..],
+            &NUMS_U8[..],
+            &NUMS_U8[..],
+            &NUMS_U16[..],
+        );
+        check_decode_4x::<u32, u8, u8, u32>(
+            &NUMS_U32[..],
+            &NUMS_U8[..],
+            &NUMS_U8[..],
+            &NUMS_U32[..],
+        );
+
+        check_decode_4x::<u32, u8, u16, u8>(
+            &NUMS_U32[..],
+            &NUMS_U8[..],
+            &NUMS_U16[..],
+            &NUMS_U8[..],
+        );
+        check_decode_4x::<u32, u8, u16, u16>(
+            &NUMS_U32[..],
+            &NUMS_U8[..],
+            &NUMS_U16[..],
+            &NUMS_U16[..],
+        );
+        check_decode_4x::<u32, u8, u16, u32>(
+            &NUMS_U32[..],
+            &NUMS_U8[..],
+            &NUMS_U16[..],
+            &NUMS_U32[..],
+        );
+    }
+
+    #[test]
+    fn test_decode_4x_u32_u16_x_x() {
+        check_decode_4x::<u32, u16, u8, u8>(
+            &NUMS_U32[..],
+            &NUMS_U16[..],
+            &NUMS_U8[..],
+            &NUMS_U8[..],
+        );
+        check_decode_4x::<u32, u16, u8, u16>(
+            &NUMS_U32[..],
+            &NUMS_U16[..],
+            &NUMS_U8[..],
+            &NUMS_U16[..],
+        );
+        check_decode_4x::<u32, u16, u8, u32>(
+            &NUMS_U32[..],
+            &NUMS_U16[..],
+            &NUMS_U8[..],
+            &NUMS_U32[..],
+        );
+
+        check_decode_4x::<u32, u16, u16, u8>(
+            &NUMS_U32[..],
+            &NUMS_U16[..],
+            &NUMS_U16[..],
+            &NUMS_U8[..],
+        );
+        check_decode_4x::<u32, u16, u16, u16>(
+            &NUMS_U32[..],
+            &NUMS_U16[..],
+            &NUMS_U16[..],
+            &NUMS_U16[..],
+        );
+        check_decode_4x::<u32, u16, u16, u32>(
+            &NUMS_U32[..],
+            &NUMS_U16[..],
+            &NUMS_U16[..],
+            &NUMS_U32[..],
+        );
+    }
+
+    #[test]
+    fn test_decode_4x_u32_u32_x_x() {
+        check_decode_4x::<u32, u32, u8, u8>(
+            &NUMS_U32[..],
+            &NUMS_U32[..],
+            &NUMS_U8[..],
+            &NUMS_U8[..],
+        );
+        check_decode_4x::<u32, u32, u8, u16>(
+            &NUMS_U32[..],
+            &NUMS_U32[..],
+            &NUMS_U8[..],
+            &NUMS_U16[..],
+        );
+
+        check_decode_4x::<u32, u32, u16, u8>(
+            &NUMS_U32[..],
+            &NUMS_U32[..],
+            &NUMS_U16[..],
+            &NUMS_U8[..],
+        );
+        check_decode_4x::<u32, u32, u16, u16>(
+            &NUMS_U32[..],
+            &NUMS_U32[..],
+            &NUMS_U16[..],
+            &NUMS_U16[..],
+        );
+    }
+
+    #[test]
+    fn test_decode_4x_u64_u8_x_x() {
+        check_decode_4x::<u64, u8, u8, u8>(&NUMS_U64[..], &NUMS_U8[..], &NUMS_U8[..], &NUMS_U8[..]);
+    }
+
+    fn check_decode_8x_u8(a: &[u8]) {
+        for i in a {
+            for j in a {
+                for k in a {
+                    for l in a {
+                        for m in a {
+                            for n in a {
+                                for o in a {
+                                    for p in a {
+                                        let mut enc = [0u8; 16];
+
+                                        let first_len = encode_to_slice(*i, &mut enc);
+                                        let second_len =
+                                            encode_to_slice(*j, &mut enc[first_len as usize..]);
+                                        let third_len = encode_to_slice(
+                                            *k,
+                                            &mut enc[(first_len + second_len) as usize..],
+                                        );
+                                        let fourth_len = encode_to_slice(
+                                            *l,
+                                            &mut enc
+                                                [(first_len + second_len + third_len) as usize..],
+                                        );
+                                        let fifth_len = encode_to_slice(
+                                            *m,
+                                            &mut enc[(first_len
+                                                + second_len
+                                                + third_len
+                                                + fourth_len)
+                                                as usize..],
+                                        );
+                                        let sixth_len = encode_to_slice(
+                                            *n,
+                                            &mut enc[(first_len
+                                                + second_len
+                                                + third_len
+                                                + fourth_len
+                                                + fifth_len)
+                                                as usize..],
+                                        );
+                                        let seventh_len = encode_to_slice(
+                                            *o,
+                                            &mut enc[(first_len
+                                                + second_len
+                                                + third_len
+                                                + fourth_len
+                                                + fifth_len
+                                                + sixth_len)
+                                                as usize..],
+                                        );
+                                        let eighth_len = encode_to_slice(
+                                            *p,
+                                            &mut enc[(first_len
+                                                + second_len
+                                                + third_len
+                                                + fourth_len
+                                                + fifth_len
+                                                + sixth_len
+                                                + seventh_len)
+                                                as usize..],
+                                        );
+
+                                        let decoded =
+                                            unsafe { decode_eight_u8_unsafe(enc.as_ptr()) };
+
+                                        assert_eq!(decoded.0, [*i, *j, *k, *l, *m, *n, *o, *p]);
+                                        assert_eq!(
+                                            decoded.1,
+                                            first_len
+                                                + second_len
+                                                + third_len
+                                                + fourth_len
+                                                + fifth_len
+                                                + sixth_len
+                                                + seventh_len
+                                                + eighth_len
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_decode_8x_u8() {
+        check_decode_8x_u8(&NUMS_U8[..]);
+    }
+
+    // #[test]
+    // fn test_two() {
+    //     // let result = unsafe { decode_two_unsafe::<u32, u32>([0x80, 0x80, 0x80, 0x80, 0x01, 0x80, 0x80, 0x80, 0x80, 0x01, 0, 0, 0, 0, 0, 0].as_ptr()) };
+    //     let result = unsafe {
+    //         decode_two_wide_unsafe::<u8, u8>(
+    //             [
+    //                 0x80, 0x01, 0x70, 0x01, 0x01, 0x80, 0x80, 0x80, 0x80, 0x01, 0, 0, 0, 0, 0, 0,
+    //             ]
+    //             .as_ptr(),
+    //         )
+    //     };
+    //     println!("{:?}", result);
+    // }
+    //
+    // #[test]
+    // fn test_four() {
+    //     let result = unsafe {
+    //         decode_four_unsafe::<u16, u16, u16, u16>(
+    //             [
+    //                 0x01, 0x82, 0x01, 0x83, 0x80, 0x01, 0x84, 0x80, 0x01, 0, 0, 0, 0, 0, 0,
+    //             ]
+    //             .as_ptr(),
+    //         )
+    //     };
+    //
+    //     println!("{:?}", result);
+    // }
+    //
+    // #[test]
+    // fn test_eight() {
+    //     let result = unsafe {
+    //         decode_eight_u8_unsafe(
+    //             [
+    //                 0x80, 0x01, 0x80, 0x01, 0x01, 0x90, 0x01, 0x01, 0x01, 0x02, 0x90, 0x01, 0, 0,
+    //                 0, 0, 0, 0, 0, 0,
+    //             ]
+    //             .as_ptr(),
+    //         )
+    //     };
+    //
+    //     println!("{:?}", result);
+    // }
 }
