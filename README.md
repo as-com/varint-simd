@@ -102,10 +102,10 @@ For more details, please see [the source code for these benchmarks](benches/vari
 | `u64` | **5.78 ns** | 19.3 ns | 14.1 ns | 21.5 ns |
 
 ## TODO
-* Further optimization (I'm pretty sure I left some performance on the table)
+* Encoding multiple values at once
 * Support for ARM NEON
 * Fallback scalar implementation
-* Decode multiple varints in one call using AVX2 (currently implemented but with very poor performance, more work needed)
+* Further optimization (I'm pretty sure I left some performance on the table)
 
 Contributions are welcome. 🙂
 
