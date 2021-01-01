@@ -21,6 +21,7 @@ jobs:
     name: Test Suite
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         target_cpu: [penryn, znver1, native]
@@ -37,6 +38,7 @@ jobs:
           toolchain: stable
           override: true
       - name: "Set env"
+        shell: bash
         run: |
           if [ ${{ matrix.target_cpu }} = "native" ]; then
             echo "CARGO_EXTRA_ARGS='--features native-optimizations" >> $GITHUB_ENV
