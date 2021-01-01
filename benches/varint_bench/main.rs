@@ -481,6 +481,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         )
     });
 
+    group.throughput(Throughput::Elements(2));
     group.bench_function("varint-simd/2x_wide/unsafe", |b| {
         b.iter_batched_ref(
             create_double_encoded_generator_wide::<u64, u64, _>(&mut rng),

@@ -315,9 +315,9 @@ unsafe fn dual_u32_stage2(comb: __m128i) -> __m128i {
     )
 }
 
-/// Decode two adjacent varints simultaneously from the input pointer. Requires AVX2. Allows for
-/// decoding a pair of `u64` values. For smaller values, the non-wide variation of this function
-/// will probably be faster.
+/// **Experimental. May have relatively poor performance.** Decode two adjacent varints
+/// simultaneously from the input pointer. Requires AVX2. Allows for decoding a pair of `u64`
+/// values. For smaller values, the non-wide variation of this function will probably be faster.
 ///
 /// Returns a tuple containing the two decoded values and the two lengths of bytes read for each
 /// value.

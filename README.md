@@ -103,6 +103,8 @@ For more details, please see [the source code for these benchmarks](benches/vari
 
 ## TODO
 * Encoding multiple values at once
+* Faster decode for two `u64` values with AVX2 (currently fairly slow)
+* Parallel ZigZag decode/encode
 * Support for ARM NEON
 * Fallback scalar implementation
 * Further optimization (I'm pretty sure I left some performance on the table)
