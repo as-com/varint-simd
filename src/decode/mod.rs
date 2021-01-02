@@ -120,8 +120,8 @@ pub unsafe fn decode_unsafe<T: VarIntTarget>(bytes: *const u8) -> (T, u8) {
     (num, len as u8)
 }
 
-/// Decodes two varints simultaneously. Target types must fit within 16 bytes when varint encoded.
-/// Requires SSSE3 support.
+/// Decodes two adjacent varints simultaneously. Target types must fit within 16 bytes when varint
+/// encoded. Requires SSSE3 support.
 ///
 /// For example, it is permissible to decode `u32` and `u32`, and `u64` and `u32`, but it is not
 /// possible to decode two `u64` values with this function simultaneously.
@@ -450,8 +450,8 @@ pub unsafe fn decode_two_wide_unsafe<T: VarIntTarget, U: VarIntTarget>(
     (first_num, second_num, first_len as u8, second_len as u8)
 }
 
-/// Decodes four varints simultaneously. Target types must fit within 16 bytes when varint encoded.
-/// Requires SSSE3 support.
+/// Decodes four adjacent varints simultaneously. Target types must fit within 16 bytes when varint
+/// encoded. Requires SSSE3 support.
 ///
 /// Returns a tuple containing the four encoded values, followed by the number of bytes read for
 /// each encoded value, followed by a boolean indicator for whether the length values may be
@@ -687,8 +687,8 @@ unsafe fn decode_four_u16_unsafe<
     )
 }
 
-/// Decodes four varints into u8's simultaneously. Requires SSSE3 support. **Does not perform
-/// overflow checking and may produce incorrect output.**
+/// Decodes four adjacent varints into u8's simultaneously. Requires SSSE3 support. **Does not
+/// perform overflow checking and may produce incorrect output.**
 ///
 /// Returns a tuple containing an array of decoded values, and the total number of bytes read.
 ///
@@ -702,6 +702,7 @@ unsafe fn decode_four_u16_unsafe<
 /// be shorter than expected. Caution is encouraged when using this function.
 #[inline]
 #[cfg(any(target_feature = "ssse3", doc))]
+#[cfg_attr(rustc_nightly, doc(cfg(target_feature = "ssse3")))]
 pub unsafe fn decode_eight_u8_unsafe(bytes: *const u8) -> ([u8; 8], u8) {
     let b = _mm_loadu_si128(bytes as *const __m128i);
 

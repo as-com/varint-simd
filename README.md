@@ -5,16 +5,21 @@ varint-simd
 [![Continuous integration](https://github.com/as-com/varint-simd/workflows/Continuous%20integration/badge.svg)](https://github.com/as-com/varint-simd/actions?query=workflow%3A%22Continuous+integration%22)
 
 varint-simd is a fast SIMD-accelerated [variable-length integer](https://developers.google.com/protocol-buffers/docs/encoding) 
-encoder and decoder written in Rust. It is intended for use in implementations of Protocol Buffers (protobuf), Apache
-Avro, and similar serialization formats.
+and [LEB128](https://en.wikipedia.org/wiki/LEB128) encoder and decoder written in Rust. It combines a largely branchless
+design with compile-time specialization to achieve gigabytes per second of throughput encoding and decoding individual
+integers on commodity hardware. An interface to decode multiple adjacent variable-length integers is also provided 
+to achieve even higher throughput, reaching [over a billion decoded 8-bit integers per second](#benchmarks) on a single 
+thread. 
 
 This library currently targets a minimum of x86_64 processors with support for SSSE3 (Intel Core/AMD Bulldozer or 
-newer), with optional optimizations for processors supporting POPCNT, LZCNT, BMI2, and/or AVX2.
+newer), with optional optimizations for processors supporting POPCNT, LZCNT, BMI2, and/or AVX2. It is intended for use 
+in implementations of Protocol Buffers (protobuf), Apache Avro, and similar serialization formats, but likely has many
+other applications.
 
 ## Usage
-**Important:** For optimal performance, ensure the Rust compiler has an appropriate `target-cpu` setting. An example is
-provided in [`.cargo/config`](.cargo/config), but you may need to edit the file to specify the oldest CPUs your compiled
-binaries will support.
+**Important:** Ensure the Rust compiler has an appropriate `target-cpu` setting. An example is provided in
+[`.cargo/config`](.cargo/config), but you may need to edit the file to specify the oldest CPUs your compiled
+binaries will support. Your project will not compile unless this is set correctly. 
 
 The `native-optimizations` feature should be enabled if and only if `target-cpu` is set to `native`, such as in the 
 example. This enables some extra optimizations if suitable for your specific CPU. 
@@ -69,41 +74,60 @@ For more details, please see [the source code for these benchmarks](benches/vari
 ![benchmark graph](images/benchmark.png)
 
 #### Decode
-|   | varint-simd unsafe | varint-simd safe | [rustc](https://github.com/nnethercote/rust/blob/0f6f2d681b39c5f95459cd09cb936b6ceb27cd82/compiler/rustc_serialize/src/leb128.rs) | [integer-encoding-rs](https://github.com/dermesser/integer-encoding-rs) | [prost](https://github.com/danburkert/prost) |
-| -- | -- | -- | -- | -- | -- |
-| `u8`  | **1.85 ns** | **2.80 ns** | 7.23 ns | 7.18 ns | 70.6 ns |
-| `u16` | **1.95 ns** | **2.78 ns** | 5.54 ns | 7.17 ns | 71.5 ns |
-| `u32` | **2.41 ns** | **3.27 ns** | 7.35 ns | 7.41 ns | 73.6 ns |
-| `u64` | **3.65 ns** | **4.15 ns** | 11.0 ns | 15.2 ns | 71.9 ns |
+**All numbers are in millions of integers per second.**
+
+|       |   varint-simd unsafe   |   varint-simd safe   | [rustc](https://github.com/nnethercote/rust/blob/0f6f2d681b39c5f95459cd09cb936b6ceb27cd82/compiler/rustc_serialize/src/leb128.rs) | [integer-encoding-rs](https://github.com/dermesser/integer-encoding-rs) | [prost](https://github.com/danburkert/prost) |
+|-------|------------------------|----------------------|--------|---------------------|--------|
+| `u8`  |             **554.81** |           **283.26** | 131.71 |              116.59 | 131.42 |
+| `u16` |             **493.96** |           **349.74** | 168.09 |              121.35 | 157.68 |
+| `u32` |             **482.95** |           **332.11** | 191.37 |              120.16 | 196.05 |
+| `u64` |             **330.86** |           **277.65** | 82.315 |              80.328 | 97.585 |
+
+|       | varint-simd 2x | varint-simd 4x | varint-simd 8x |
+|-------|----------------|----------------|----------------|
+| `u8`  |         658.52 |         644.36 |         896.32 |
+| `u16` |         547.39 |         540.93 |                |
+| `u32` |         688.11 |                |                |
 
 #### Encode
-|   | varint-simd | rustc | integer-encoding-rs | prost |
-| -- | -- | -- | -- | -- |
-| `u8`  | **2.50 ns** | 5.20 ns | 6.24 ns | 10.5 ns |
-| `u16` | **2.65 ns** | 5.47 ns | 6.63 ns | 11.5 ns |
-| `u32` | **2.96 ns** | 6.43 ns | 7.74 ns | 13.7 ns |
-| `u64` | **3.85 ns** | 14.1 ns | 13.0 ns | 21.8 ns |
+
+|       |   varint-simd   | rustc  | integer-encoding-rs | prost  |
+|-------|-----------------|--------|---------------------|--------|
+| `u8`  |      **383.01** | 214.05 |              126.66 | 93.617 |
+| `u16` |      **341.25** | 181.18 |              126.79 | 85.014 |
+| `u32` |      **360.87** | 157.95 |              125.00 | 77.402 |
+| `u64` |      **303.72** | 72.660 |              78.153 | 46.456 |
 
 ### AMD Ryzen 5 2600X @ 4.125 GHz "Zen+"
 #### Decode
-|   | varint-simd unsafe | varint-simd safe | rustc | integer-encoding-rs | prost |
-| -- | -- | -- | -- | -- | -- |
-| `u8`  | **2.62 ns** | **3.66 ns** | 7.57 ns | 8.27 ns | 37.6 ns |
-| `u16` | **3.14 ns** | **3.98 ns** | 6.57 ns | 7.56 ns | 36.7 ns |
-| `u32` | **4.36 ns** | **4.83 ns** | 6.57 ns | 7.98 ns | 36.2 ns |
-| `u64` | **6.97 ns** | **7.12 ns** | 12.5 ns | 13.2 ns | 40.3 ns |
+
+|       |   varint-simd unsafe   |   varint-simd safe   | rustc  | integer-encoding-rs | prost  |
+|-------|------------------------|----------------------|--------|---------------------|--------|
+| `u8`  |             **537.51** |           **304.85** | 152.35 |              138.54 | 124.44 |
+| `u16` |             **403.39** |           **300.68** | 170.31 |              156.06 | 147.83 |
+| `u32` |             **293.88** |           **235.92** | 160.48 |              159.13 | 150.05 |
+| `u64` |             **229.28** |           **193.28** | 75.822 |              85.010 | 83.407 |
+
+
+|       | varint-simd 2x | varint-simd 4x | varint-simd 8x |
+|-------|----------------|----------------|----------------|
+| `u8`  |         943.75 |         808.45 |       1,106.50 |
+| `u16` |         721.01 |         632.03 |                |
+| `u32` |         459.77 |                |                |
 
 #### Encode
-|   | varint-simd | rustc | integer-encoding-rs | prost |
-| -- | -- | -- | -- | -- |
-| `u8`  | **3.94 ns** | 4.64 ns | 7.65 ns | 10.4 ns |
-| `u16` | **4.23 ns** | 6.03 ns | 7.51 ns | 10.6 ns |
-| `u32` | **4.62 ns** | 9.33 ns | 8.94 ns | 12.9 ns |
-| `u64` | **5.78 ns** | 19.3 ns | 14.1 ns | 21.5 ns |
+
+|       |   varint-simd   | rustc  | integer-encoding-rs | prost  |
+|-------|-----------------|--------|---------------------|--------|
+| `u8`  |      **362.97** | 211.07 |              142.16 | 98.237 |
+| `u16` |      **334.10** | 172.09 |              140.78 | 96.480 |
+| `u32` |      **288.19** | 101.56 |              126.27 | 82.210 |
+| `u64` |      **207.89** | 52.515 |              79.375 | 48.088 |
 
 ## TODO
 * Encoding multiple values at once
 * Faster decode for two `u64` values with AVX2 (currently fairly slow)
+* Improve performance of "safe" interface
 * Parallel ZigZag decode/encode
 * Support for ARM NEON
 * Fallback scalar implementation
@@ -124,6 +148,10 @@ specify this feature manually.
 
 Library crates **should not** enable this feature by default. A separate feature flag should be provided to enable this
 feature in this crate. 
+
+## Previous Work
+
+* Daniel Lemire, et. al. - Stream VByte: Faster Byte-Oriented Integer Compression: https://arxiv.org/abs/1709.08990
 
 ## License
 
