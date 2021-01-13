@@ -184,11 +184,7 @@ pub unsafe fn decode_two_unsafe<T: VarIntTarget, U: VarIntTarget>(
     // Only use "turbo" mode if the numbers fit in 64-bit lanes
     let should_turbo = T::MAX_VARINT_BYTES <= 8
         && U::MAX_VARINT_BYTES <= 8
-        // PDEP/PEXT are still a little faster here
-        && cfg!(not(all(
-            target_feature = "bmi2",
-            fast_pdep
-        )));
+        && cfg!(not(all(target_feature = "bmi2", very_fast_pdep)));
     if should_turbo {
         // const, so optimized out
         let comb = _mm_or_si128(first, _mm_bslli_si128(second, 8));
@@ -234,7 +230,7 @@ unsafe fn decode_two_u32_unsafe<T: VarIntTarget, U: VarIntTarget>(
     let second_num;
 
     // Only use "turbo" mode if PDEP/PEXT are not faster
-    let should_turbo = cfg!(not(all(target_feature = "bmi2", fast_pdep)));
+    let should_turbo = cfg!(not(all(target_feature = "bmi2", very_fast_pdep)));
     if should_turbo {
         // const, so optimized out
 
@@ -546,7 +542,7 @@ pub unsafe fn decode_four_unsafe<
         // PDEP/PEXT are still a little faster here
         && cfg!(not(all(
             target_feature = "bmi2",
-            fast_pdep
+            very_fast_pdep
         )));
     if should_turbo {
         // const, so optimized out
@@ -637,8 +633,8 @@ unsafe fn decode_four_u16_unsafe<
     let third_num;
     let fourth_num;
 
-    // PDEP/PEXT are still a little faster here
-    let should_turbo = cfg!(not(all(target_feature = "bmi2", fast_pdep)));
+    // PDEP/PEXT may be still a little faster here
+    let should_turbo = cfg!(not(all(target_feature = "bmi2", very_fast_pdep)));
     if should_turbo {
         // const, so optimized out
 

@@ -5,8 +5,16 @@ use rustc_version::Channel;
 #[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::__cpuid;
 
+/// Performance of PDEP/PEXT relative to arithmetic/bit operations
+#[derive(PartialOrd, PartialEq)]
+enum PdepPerf {
+    VeryFast = 20,
+    Fast = 10,
+    Slow = 0,
+}
+
 #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
-fn is_pdep_slow() -> bool {
+fn pdep_speed() -> PdepPerf {
     let leaf0 = unsafe { __cpuid(0) };
     let mut buf = Vec::with_capacity(12);
     buf.extend_from_slice(&leaf0.ebx.to_le_bytes());
@@ -29,16 +37,21 @@ fn is_pdep_slow() -> bool {
         // Zen, Zen+, and Zen 2 CPUs have very poor PDEP/PEXT performance
         if family == 0xF && (extended_family == 0x8 || extended_family == 0x9) {
             println!("Detected Zen CPU");
-            return true;
+            return PdepPerf::Slow;
+        }
+
+        if family == 0xF && extended_family == 0xA {
+            println!("Detected Zen 3 CPU");
+            return PdepPerf::Fast;
         }
     }
 
-    false
+    PdepPerf::VeryFast
 }
 
 #[cfg(not(any(target_arch = "x86_64", target_arch = "x86")))]
-fn is_pdep_slow() -> bool {
-    true
+fn pdep_speed() -> bool {
+    PdepPerf::Slow
 }
 
 fn main() {
@@ -48,10 +61,17 @@ fn main() {
     .is_ok()
     {
         println!("cargo:rustc-cfg=fast_pdep");
+        println!("cargo:rustc-cfg=very_fast_pdep");
     } else if std::env::var("CARGO_FEATURE_NATIVE_OPTIMIZATIONS").is_ok() {
         println!("Compiling with native optimizations");
-        if !is_pdep_slow() {
+        let speed = pdep_speed();
+
+        if speed >= PdepPerf::Fast {
             println!("cargo:rustc-cfg=fast_pdep");
+        }
+
+        if speed >= PdepPerf::VeryFast {
+            println!("cargo:rustc-cfg=very_fast_pdep");
         }
     }
 
