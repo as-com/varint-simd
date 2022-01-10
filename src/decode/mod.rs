@@ -91,33 +91,58 @@ pub unsafe fn decode_unsafe<T: VarIntTarget>(bytes: *const u8) -> (T, u8) {
     // It looks like you're trying to understand what this code does. You should probably read
     // this first: https://developers.google.com/protocol-buffers/docs/encoding#varints
 
-    let b = _mm_loadu_si128(bytes as *const __m128i);
+    if T::MAX_VARINT_BYTES <= 5 {
+        // we can do everything in a normal 64-bit register
+        let b = *std::mem::transmute::<_, *const u64>(bytes);
+        // println!("{:#066b} b", b);
 
-    // Get the most significant bits of each byte
-    let bitmask: i32 = _mm_movemask_epi8(b);
+        // println!("{:#066b} op", !0x7f7f7f7f7f7f7f7fu64);
+        let msbs = !b & !0x7f7f7f7f7f7f7f7f;
+        // println!("{:#066b} msbs", msbs);
+        /*
+        TODO: theoretically, we could delay the `+1` and/or do it in parallel with other parts, but
+         moving it downwards absolutely tanks performance and I have no idea why
+        */
+        let len = msbs.trailing_zeros() + 1; // in bits
 
-    // A zero most significant bit indicates the end of a varint
-    // Find how long the number really is
-    let bm_not = !bitmask;
-    let len = bm_not.trailing_zeros() + 1; // should compile to bsf or tzcnt (?), verify
+        // println!("{}", len);
 
-    // Mask out irrelevant bytes from the vector
-    let ascend = _mm_setr_epi8(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);
-    let mask = _mm_cmplt_epi8(ascend, _mm_set1_epi8(len as i8));
-    let varint_part = _mm_and_si128(b, mask);
+        // TODO: this len.min(63) works for u32, but is technically incorrect
+        let varint_part = b & !(0xffffffffffffffff << len.min(63));
+        // println!("{:#066b} varint_part", varint_part);
 
-    // // Turn off the most significant bits
-    // let msb_masked = _mm_and_si128(
-    //     varint_part,
-    //     _mm_set_epi8(
-    //         0, 0, 0, 0, 0, 0, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127,
-    //     ),
-    // );
+        let num = T::scalar_to_num(varint_part);
 
-    // Turn the vector into a scalar value by concatenating the 7-bit values
-    let num = T::vector_to_num(std::mem::transmute(varint_part)); // specialized functions for different number sizes
+        (num, (len / 8) as u8)
+    } else {
+        let b = _mm_loadu_si128(bytes as *const __m128i);
 
-    (num, len as u8)
+        // Get the most significant bits of each byte
+        let bitmask: i32 = _mm_movemask_epi8(b);
+
+        // A zero most significant bit indicates the end of a varint
+        // Find how long the number really is
+        let bm_not = !bitmask;
+        let len = bm_not.trailing_zeros() + 1; // should compile to bsf or tzcnt (?), verify
+
+        // Mask out irrelevant bytes from the vector
+        let ascend = _mm_setr_epi8(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);
+        let mask = _mm_cmplt_epi8(ascend, _mm_set1_epi8(len as i8));
+        let varint_part = _mm_and_si128(b, mask);
+
+        // // Turn off the most significant bits
+        // let msb_masked = _mm_and_si128(
+        //     varint_part,
+        //     _mm_set_epi8(
+        //         0, 0, 0, 0, 0, 0, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127,
+        //     ),
+        // );
+
+        // Turn the vector into a scalar value by concatenating the 7-bit values
+        let num = T::vector_to_num(std::mem::transmute(varint_part)); // specialized functions for different number sizes
+
+        (num, len as u8)
+    }
 }
 
 /// Decodes two adjacent varints simultaneously. Target types must fit within 16 bytes when varint
