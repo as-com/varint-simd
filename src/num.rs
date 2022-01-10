@@ -24,6 +24,8 @@ pub trait VarIntTarget: Debug + Eq + PartialEq + Sized + Copy {
     /// intrinsic vectors.
     fn vector_to_num(res: [u8; 16]) -> Self;
 
+    fn scalar_to_num(x: u64) -> Self;
+
     /// Cast from u32 to self
     fn cast_u32(num: u32) -> Self;
 
@@ -46,19 +48,22 @@ impl VarIntTarget for u8 {
     const MAX_LAST_VARINT_BYTE: u8 = 0b00000001;
 
     #[inline(always)]
-    #[cfg(all(target_arch = "x86_64", target_feature = "bmi2", fast_pdep))]
     fn vector_to_num(res: [u8; 16]) -> Self {
-        let arr: [u64; 2] = unsafe { std::mem::transmute(res) };
-        let x = arr[0];
+        let res: [u64; 2] = unsafe { std::mem::transmute(res) };
+        let x = res[0];
 
+        Self::scalar_to_num(x)
+    }
+
+    #[inline(always)]
+    #[cfg(all(target_arch = "x86_64", target_feature = "bmi2", fast_pdep))]
+    fn scalar_to_num(x: u64) -> Self {
         unsafe { _pext_u64(x, 0x000000000000017f) as u8 }
     }
 
     #[inline(always)]
     #[cfg(not(all(target_arch = "x86_64", target_feature = "bmi2", fast_pdep)))]
-    fn vector_to_num(res: [u8; 16]) -> Self {
-        let res: [u64; 2] = unsafe { std::mem::transmute(res) };
-        let x = res[0];
+    fn scalar_to_num(x: u64) -> Self {
         ((x & 0x000000000000007f) | ((x & 0x0000000000000100) >> 1)) as u8
     }
 
@@ -111,20 +116,22 @@ impl VarIntTarget for u16 {
     const MAX_LAST_VARINT_BYTE: u8 = 0b00000011;
 
     #[inline(always)]
-    #[cfg(all(target_arch = "x86_64", target_feature = "bmi2", fast_pdep))]
     fn vector_to_num(res: [u8; 16]) -> Self {
         let arr: [u64; 2] = unsafe { std::mem::transmute(res) };
         let x = arr[0];
 
+        Self::scalar_to_num(x)
+    }
+
+    #[inline(always)]
+    #[cfg(all(target_arch = "x86_64", target_feature = "bmi2", fast_pdep))]
+    fn scalar_to_num(x: u64) -> Self {
         unsafe { _pext_u64(x, 0x0000000000037f7f) as u16 }
     }
 
     #[inline(always)]
     #[cfg(not(all(target_arch = "x86_64", target_feature = "bmi2", fast_pdep)))]
-    fn vector_to_num(res: [u8; 16]) -> Self {
-        let arr: [u64; 2] = unsafe { std::mem::transmute(res) };
-        let x = arr[0];
-
+    fn scalar_to_num(x: u64) -> Self {
         ((x & 0x000000000000007f)
             | ((x & 0x0000000000030000) >> 2)
             | ((x & 0x0000000000007f00) >> 1)) as u16
@@ -180,20 +187,22 @@ impl VarIntTarget for u32 {
     const MAX_LAST_VARINT_BYTE: u8 = 0b00001111;
 
     #[inline(always)]
-    #[cfg(all(target_arch = "x86_64", target_feature = "bmi2", fast_pdep))]
     fn vector_to_num(res: [u8; 16]) -> Self {
         let arr: [u64; 2] = unsafe { std::mem::transmute(res) };
         let x = arr[0];
 
+        Self::scalar_to_num(x)
+    }
+
+    #[inline(always)]
+    #[cfg(all(target_arch = "x86_64", target_feature = "bmi2", fast_pdep))]
+    fn scalar_to_num(x: u64) -> Self {
         unsafe { _pext_u64(x, 0x0000000f7f7f7f7f) as u32 }
     }
 
     #[inline(always)]
     #[cfg(not(all(target_arch = "x86_64", target_feature = "bmi2", fast_pdep)))]
-    fn vector_to_num(res: [u8; 16]) -> Self {
-        let arr: [u64; 2] = unsafe { std::mem::transmute(res) };
-        let x = arr[0];
-
+    fn scalar_to_num(x: u64) -> Self {
         ((x & 0x000000000000007f)
             | ((x & 0x0000000f00000000) >> 4)
             | ((x & 0x000000007f000000) >> 3)
@@ -251,6 +260,10 @@ impl VarIntTarget for u64 {
     type Signed = i64;
     const MAX_VARINT_BYTES: u8 = 10;
     const MAX_LAST_VARINT_BYTE: u8 = 0b00000001;
+
+    fn scalar_to_num(_x: u64) -> Self {
+        unimplemented!("destination too wide")
+    }
 
     #[inline(always)]
     #[cfg(all(target_feature = "bmi2", fast_pdep))]
