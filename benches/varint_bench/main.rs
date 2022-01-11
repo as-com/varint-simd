@@ -12,7 +12,7 @@ mod leb128;
 mod prost_varint;
 
 #[inline(always)]
-fn create_batched_encoded_generator<T: VarInt, R: Rng, const C: usize>(
+fn create_batched_encoded_generator<T: VarInt + Default, R: Rng, const C: usize>(
     rng: &mut R,
 ) -> impl FnMut() -> (Vec<u8>, Vec<T>) + '_
 where
@@ -28,7 +28,7 @@ where
             let len = rng.gen::<T>().encode_var(&mut encoded[idx..]);
             idx += len;
         }
-        (encoded, Vec::with_capacity(C))
+        (encoded, vec![Default::default(); C])
     }
 }
 
@@ -40,10 +40,10 @@ fn decode_batched_varint_simd_unsafe<T: VarIntTarget, const C: usize>(
     let out = &mut input.1;
 
     let mut slice = &data[..];
-    for _ in 0..C {
+    for i in 0..C {
         // SAFETY: the input slice should have at least 16 bytes of allocated padding at the end
         let (num, len) = unsafe { decode_unsafe::<T>(slice.as_ptr()) };
-        out.push(num);
+        out[i] = num;
         slice = &slice[(len as usize)..];
     }
 }
@@ -56,10 +56,10 @@ fn decode_batched_varint_simd_2x_unsafe<T: VarIntTarget, const C: usize>(
     let out = &mut input.1;
 
     let mut slice = &data[..];
-    for _ in 0..(C / 2) {
+    for i in 0..(C / 2) {
         let (num1, num2, len1, len2) = unsafe { decode_two_unsafe::<T, T>(slice.as_ptr()) };
-        out.push(num1);
-        out.push(num2);
+        out[i * 2] = num1;
+        out[i * 2 + 1] = num2;
         slice = &slice[((len1 + len2) as usize)..];
     }
 }
@@ -72,10 +72,10 @@ fn decode_batched_varint_simd_2x_wide_unsafe<T: VarIntTarget, const C: usize>(
     let out = &mut input.1;
 
     let mut slice = &data[..];
-    for _ in 0..(C / 2) {
+    for i in 0..(C / 2) {
         let (num1, num2, len1, len2) = unsafe { decode_two_wide_unsafe::<T, T>(slice.as_ptr()) };
-        out.push(num1);
-        out.push(num2);
+        out[i * 2] = num1;
+        out[i * 2 + 1] = num2;
         slice = &slice[((len1 + len2) as usize)..];
     }
 }
@@ -88,13 +88,13 @@ fn decode_batched_varint_simd_4x_unsafe<T: VarIntTarget, const C: usize>(
     let out = &mut input.1;
 
     let mut slice = &data[..];
-    for _ in 0..(C / 4) {
+    for i in 0..(C / 4) {
         let (num1, num2, num3, num4, len1, len2, len3, len4, _invalid) =
             unsafe { decode_four_unsafe::<T, T, T, T>(slice.as_ptr()) };
-        out.push(num1);
-        out.push(num2);
-        out.push(num3);
-        out.push(num4);
+        out[i * 4] = num1;
+        out[i * 4 + 1] = num2;
+        out[i * 4 + 2] = num3;
+        out[i * 4 + 3] = num4;
         slice = &slice[((len1 + len2 + len3 + len4) as usize)..];
     }
 }
@@ -105,9 +105,9 @@ fn decode_batched_varint_simd_8x_u8_unsafe<const C: usize>(input: &mut (Vec<u8>,
     let out = &mut input.1;
 
     let mut slice = &data[..];
-    for _ in 0..(C / 8) {
+    for i in 0..(C / 8) {
         let (nums, total_len) = unsafe { decode_eight_u8_unsafe(slice.as_ptr()) };
-        out.extend_from_slice(nums.as_slice());
+        out[(i * 8)..(i * 8 + 8)].copy_from_slice(&nums);
         slice = &slice[(total_len as usize)..];
     }
 }
@@ -118,9 +118,9 @@ fn decode_batched_varint_simd_safe<T: VarIntTarget, const C: usize>(input: &mut 
     let out = &mut input.1;
 
     let mut slice = &data[..];
-    for _ in 0..C {
+    for i in 0..C {
         let (num, len) = decode::<T>(slice).unwrap();
-        out.push(num);
+        out[i] = num;
         slice = &slice[(len as usize)..];
     }
 }
@@ -131,9 +131,9 @@ fn decode_batched_integer_encoding<T: VarInt, const C: usize>(input: &mut (Vec<u
     let out = &mut input.1;
 
     let mut slice = &data[..];
-    for _ in 0..C {
+    for i in 0..C {
         let (num, len) = T::decode_var(slice).unwrap();
-        out.push(num);
+        out[i] = num;
         slice = &slice[len..];
     }
 }
@@ -144,9 +144,9 @@ fn decode_batched_rustc_u8<const C: usize>(input: &mut (Vec<u8>, Vec<u8>)) {
     let out = &mut input.1;
 
     let mut slice = &data[..];
-    for _ in 0..C {
+    for i in 0..C {
         let (num, len) = leb128::read_u16_leb128(slice);
-        out.push(num as u8);
+        out[i] = num as u8;
         slice = &slice[len..];
     }
 }
@@ -157,9 +157,9 @@ fn decode_batched_rustc_u16<const C: usize>(input: &mut (Vec<u8>, Vec<u16>)) {
     let out = &mut input.1;
 
     let mut slice = &data[..];
-    for _ in 0..C {
+    for i in 0..C {
         let (num, len) = leb128::read_u16_leb128(slice);
-        out.push(num);
+        out[i] = num;
         slice = &slice[len..];
     }
 }
@@ -170,9 +170,9 @@ fn decode_batched_rustc_u32<const C: usize>(input: &mut (Vec<u8>, Vec<u32>)) {
     let out = &mut input.1;
 
     let mut slice = &data[..];
-    for _ in 0..C {
+    for i in 0..C {
         let (num, len) = leb128::read_u32_leb128(slice);
-        out.push(num);
+        out[i] = num;
         slice = &slice[len..];
     }
 }
@@ -183,9 +183,9 @@ fn decode_batched_rustc_u64<const C: usize>(input: &mut (Vec<u8>, Vec<u64>)) {
     let out = &mut input.1;
 
     let mut slice = &data[..];
-    for _ in 0..C {
+    for i in 0..C {
         let (num, len) = leb128::read_u64_leb128(slice);
-        out.push(num);
+        out[i] = num;
         slice = &slice[len..];
     }
 }
@@ -196,9 +196,9 @@ fn decode_batched_prost<T: VarIntTarget, const C: usize>(input: &mut (Vec<u8>, V
     let out = &mut input.1;
 
     let mut slice = &data[..];
-    for _ in 0..C {
+    for i in 0..C {
         let num = prost_varint::decode_varint(&mut slice).unwrap();
-        out.push(T::cast_u64(num));
+        out[i] = T::cast_u64(num);
     }
 }
 
