@@ -93,7 +93,7 @@ pub unsafe fn decode_unsafe<T: VarIntTarget>(bytes: *const u8) -> (T, u8) {
 
     if T::MAX_VARINT_BYTES <= 5 {
         // we can do everything in a normal 64-bit register
-        let b = *std::mem::transmute::<_, *const u64>(bytes);
+        let b = bytes.cast::<u64>().read_unaligned();
         // println!("{:#066b} b", b);
 
         // println!("{:#066b} op", !0x7f7f7f7f7f7f7f7fu64);
