@@ -107,14 +107,37 @@ pub unsafe fn decode_unsafe<T: VarIntTarget>(bytes: *const u8) -> (T, u8) {
 
         // println!("{}", len);
 
-        // TODO: this len.min(63) works for u32, but is technically incorrect
-        let varint_part = b & !(0xffffffffffffffff << len.min(63));
+        // b & blsmsk(msbs)
+        let varint_part = b & (msbs ^ msbs.wrapping_sub(1));
         // println!("{:#066b} varint_part", varint_part);
 
         let num = T::scalar_to_num(varint_part);
 
         (num, (len / 8) as u8)
     } else {
+        let b0 = bytes.cast::<u64>().read_unaligned();
+        let b1 = bytes.cast::<u64>().add(1).read_unaligned();
+
+        let msbs0 = !b0 & !0x7f7f7f7f7f7f7f7f;
+        let msbs1 = !b1 & !0x7f7f7f7f7f7f7f7f;
+
+        let len0 = msbs0.trailing_zeros() + 1;
+        let len1 = msbs1.trailing_zeros() + 1;
+
+        // doing this is faster than using len0, len1 because tzcnt has significant latency
+        // b0 & blsmsk(msbs0)
+        let varint_part0 = b0 & (msbs0 ^ msbs0.wrapping_sub(1));
+        // b1 & blsmsk(msbs1)
+        let varint_part1 = (b1 & (msbs1 ^ msbs1.wrapping_sub(1))) * ((msbs0 == 0) as u64);
+
+        // let varint_part0 = b0 & !(0xffffffffffffffff << len0.min(63));
+        // let varint_part1 = b1 & !(0xffffffffffffffff << (((msbs0 == 0) as u32) * len1.min(63)));
+
+        let num = T::vector_to_num(std::mem::transmute([varint_part0, varint_part1]));
+        let len = if msbs0 == 0 { len1 + 64 } else { len0 } / 8;
+
+        return (num, len as u8);
+
         let b = _mm_loadu_si128(bytes as *const __m128i);
 
         // Get the most significant bits of each byte
@@ -144,6 +167,11 @@ pub unsafe fn decode_unsafe<T: VarIntTarget>(bytes: *const u8) -> (T, u8) {
         (num, len as u8)
     }
 }
+
+// #[cfg(any(target_feature = "ssse3", doc))]
+// pub unsafe fn gib_asm(bytes: *const u8) -> (u64, u8) {
+//     decode_unsafe(bytes)
+// }
 
 /// Decodes two adjacent varints simultaneously. Target types must fit within 16 bytes when varint
 /// encoded. Requires SSSE3 support.

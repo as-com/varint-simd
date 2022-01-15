@@ -4,7 +4,7 @@ use integer_encoding::VarInt;
 use rand::distributions::{Distribution, Standard};
 use rand::{thread_rng, Rng};
 use varint_simd::{
-    decode, decode_eight_u8_unsafe, decode_four_unsafe, decode_two_unsafe, decode_two_wide_unsafe,
+    decode, decode_eight_u8_unsafe, decode_four_unsafe, decode_two_unsafe, //decode_two_wide_unsafe,
     decode_unsafe, encode, VarIntTarget,
 };
 
@@ -64,21 +64,21 @@ fn decode_batched_varint_simd_2x_unsafe<T: VarIntTarget, const C: usize>(
     }
 }
 
-#[inline(always)]
-fn decode_batched_varint_simd_2x_wide_unsafe<T: VarIntTarget, const C: usize>(
-    input: &mut (Vec<u8>, Vec<T>),
-) {
-    let data = &input.0;
-    let out = &mut input.1;
-
-    let mut slice = &data[..];
-    for i in 0..(C / 2) {
-        let (num1, num2, len1, len2) = unsafe { decode_two_wide_unsafe::<T, T>(slice.as_ptr()) };
-        out[i * 2] = num1;
-        out[i * 2 + 1] = num2;
-        slice = &slice[((len1 + len2) as usize)..];
-    }
-}
+// #[inline(always)]
+// fn decode_batched_varint_simd_2x_wide_unsafe<T: VarIntTarget, const C: usize>(
+//     input: &mut (Vec<u8>, Vec<T>),
+// ) {
+//     let data = &input.0;
+//     let out = &mut input.1;
+//
+//     let mut slice = &data[..];
+//     for i in 0..(C / 2) {
+//         let (num1, num2, len1, len2) = unsafe { decode_two_wide_unsafe::<T, T>(slice.as_ptr()) };
+//         out[i * 2] = num1;
+//         out[i * 2 + 1] = num2;
+//         slice = &slice[((len1 + len2) as usize)..];
+//     }
+// }
 
 #[inline(always)]
 fn decode_batched_varint_simd_4x_unsafe<T: VarIntTarget, const C: usize>(
@@ -562,13 +562,13 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         )
     });
 
-    group.bench_function("varint-simd/2x_wide/unsafe", |b| {
-        b.iter_batched_ref(
-            create_batched_encoded_generator::<u64, _, SEQUENCE_LEN>(&mut rng),
-            decode_batched_varint_simd_2x_wide_unsafe::<u64, SEQUENCE_LEN>,
-            BatchSize::SmallInput,
-        )
-    });
+    // group.bench_function("varint-simd/2x_wide/unsafe", |b| {
+    //     b.iter_batched_ref(
+    //         create_batched_encoded_generator::<u64, _, SEQUENCE_LEN>(&mut rng),
+    //         decode_batched_varint_simd_2x_wide_unsafe::<u64, SEQUENCE_LEN>,
+    //         BatchSize::SmallInput,
+    //     )
+    // });
 
     group.finish();
 
