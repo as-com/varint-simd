@@ -826,7 +826,7 @@ pub unsafe fn decode_eight_u8_unsafe(bytes: *const u8) -> ([u8; 8], u8) {
         _mm_setr_epi8(0, 2, 4, 6, 8, 10, 12, 14, -1, -1, -1, -1, -1, -1, -1, -1),
     );
     let lower: [u64; 2] = std::mem::transmute(shuf);
-    let nums = std::mem::transmute(lower[0]);
+    let nums = lower[0].to_ne_bytes();
 
     (nums, last_len)
 }
