@@ -4,8 +4,13 @@ use integer_encoding::VarInt;
 use rand::distributions::{Distribution, Standard};
 use rand::{thread_rng, Rng};
 use varint_simd::{
-    decode, decode_eight_u8_unsafe, decode_four_unsafe, decode_two_unsafe, //decode_two_wide_unsafe,
-    decode_unsafe, encode, VarIntTarget,
+    decode,
+    decode_eight_u8_unsafe,
+    decode_four_unsafe,
+    decode_two_unsafe, //decode_two_wide_unsafe,
+    decode_unsafe,
+    encode,
+    VarIntTarget,
 };
 
 mod leb128;

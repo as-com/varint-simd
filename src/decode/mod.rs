@@ -27,7 +27,7 @@ mod lookup;
 #[inline]
 #[cfg(any(target_feature = "ssse3", doc))]
 #[cfg_attr(rustc_nightly, doc(cfg(target_feature = "ssse3")))]
-pub fn decode<T: VarIntTarget>(bytes: &[u8]) -> Result<(T, u8), VarIntDecodeError> {
+pub fn decode<T: VarIntTarget>(bytes: &[u8]) -> Result<(T, usize), VarIntDecodeError> {
     let result = if bytes.len() >= 16 {
         unsafe { decode_unsafe(bytes.as_ptr()) }
     } else if !bytes.is_empty() {
@@ -43,9 +43,9 @@ pub fn decode<T: VarIntTarget>(bytes: &[u8]) -> Result<(T, u8), VarIntDecodeErro
     // The ordering of conditions here is weird because of a performance regression (?) in rustc 1.49
     if bytes.len() >= T::MAX_VARINT_BYTES as usize
         // we perform a signed comparison here because a valid last byte is always positive
-        && unsafe { *bytes.get_unchecked((T::MAX_VARINT_BYTES - 1) as usize) } as i8 > T::MAX_LAST_VARINT_BYTE as i8
-        && result.1 == T::MAX_VARINT_BYTES
-        || result.1 > T::MAX_VARINT_BYTES
+        && unsafe { *bytes.get_unchecked((T::MAX_VARINT_BYTES - 1) as usize) } > T::MAX_LAST_VARINT_BYTE
+        && result.1 == T::MAX_VARINT_BYTES as usize
+        || result.1 > T::MAX_VARINT_BYTES as usize
     {
         Err(VarIntDecodeError::Overflow)
     } else {
@@ -69,7 +69,7 @@ pub fn decode<T: VarIntTarget>(bytes: &[u8]) -> Result<(T, u8), VarIntDecodeErro
 #[inline]
 #[cfg(any(target_feature = "ssse3", doc))]
 #[cfg_attr(rustc_nightly, doc(cfg(target_feature = "ssse3")))]
-pub fn decode_zigzag<T: SignedVarIntTarget>(bytes: &[u8]) -> Result<(T, u8), VarIntDecodeError> {
+pub fn decode_zigzag<T: SignedVarIntTarget>(bytes: &[u8]) -> Result<(T, usize), VarIntDecodeError> {
     decode::<T::Unsigned>(bytes).map(|r| (r.0.unzigzag(), r.1))
 }
 
@@ -87,7 +87,7 @@ pub fn decode_zigzag<T: SignedVarIntTarget>(bytes: &[u8]) -> Result<(T, u8), Var
 #[inline]
 #[cfg(any(target_feature = "ssse3", doc))]
 #[cfg_attr(rustc_nightly, doc(cfg(target_feature = "ssse3")))]
-pub unsafe fn decode_unsafe<T: VarIntTarget>(bytes: *const u8) -> (T, u8) {
+pub unsafe fn decode_unsafe<T: VarIntTarget>(bytes: *const u8) -> (T, usize) {
     // It looks like you're trying to understand what this code does. You should probably read
     // this first: https://developers.google.com/protocol-buffers/docs/encoding#varints
 
@@ -113,7 +113,7 @@ pub unsafe fn decode_unsafe<T: VarIntTarget>(bytes: *const u8) -> (T, u8) {
 
         let num = T::scalar_to_num(varint_part);
 
-        (num, (len / 8) as u8)
+        (num, (len / 8) as usize)
     } else {
         let b0 = bytes.cast::<u64>().read_unaligned();
         let b1 = bytes.cast::<u64>().add(1).read_unaligned();
@@ -121,10 +121,18 @@ pub unsafe fn decode_unsafe<T: VarIntTarget>(bytes: *const u8) -> (T, u8) {
         let msbs0 = !b0 & !0x7f7f7f7f7f7f7f7f;
         let msbs1 = !b1 & !0x7f7f7f7f7f7f7f7f;
 
+        // TODO: could this be faster on CPUs without fast tzcnt?
+        // let blsi0 = msbs0.wrapping_neg() & msbs0;
+        // let blsi1 = msbs1.wrapping_neg() & msbs1;
+        //
+        // let len0 = ((blsi0.wrapping_mul(0x20406080a0c0e1)) >> 60) & 15;
+        // let len1 = ((blsi1.wrapping_mul(0x20406080a0c0e1)) >> 60) & 15;
+
         let len0 = msbs0.trailing_zeros() + 1;
         let len1 = msbs1.trailing_zeros() + 1;
 
         // doing this is faster than using len0, len1 because tzcnt has significant latency
+        // and if the caller does not need the length, the call can be optimized out entirely
         // b0 & blsmsk(msbs0)
         let varint_part0 = b0 & (msbs0 ^ msbs0.wrapping_sub(1));
         // b1 & blsmsk(msbs1)
@@ -136,42 +144,9 @@ pub unsafe fn decode_unsafe<T: VarIntTarget>(bytes: *const u8) -> (T, u8) {
         let num = T::vector_to_num(std::mem::transmute([varint_part0, varint_part1]));
         let len = if msbs0 == 0 { len1 + 64 } else { len0 } / 8;
 
-        return (num, len as u8);
-
-        let b = _mm_loadu_si128(bytes as *const __m128i);
-
-        // Get the most significant bits of each byte
-        let bitmask: i32 = _mm_movemask_epi8(b);
-
-        // A zero most significant bit indicates the end of a varint
-        // Find how long the number really is
-        let bm_not = !bitmask;
-        let len = bm_not.trailing_zeros() + 1; // should compile to bsf or tzcnt (?), verify
-
-        // Mask out irrelevant bytes from the vector
-        let ascend = _mm_setr_epi8(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);
-        let mask = _mm_cmplt_epi8(ascend, _mm_set1_epi8(len as i8));
-        let varint_part = _mm_and_si128(b, mask);
-
-        // // Turn off the most significant bits
-        // let msb_masked = _mm_and_si128(
-        //     varint_part,
-        //     _mm_set_epi8(
-        //         0, 0, 0, 0, 0, 0, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127,
-        //     ),
-        // );
-
-        // Turn the vector into a scalar value by concatenating the 7-bit values
-        let num = T::vector_to_num(std::mem::transmute(varint_part)); // specialized functions for different number sizes
-
-        (num, len as u8)
+        (num, len as usize)
     }
 }
-
-// #[cfg(any(target_feature = "ssse3", doc))]
-// pub unsafe fn gib_asm(bytes: *const u8) -> (u64, u8) {
-//     decode_unsafe(bytes)
-// }
 
 /// Decodes two adjacent varints simultaneously. Target types must fit within 16 bytes when varint
 /// encoded. Requires SSSE3 support.

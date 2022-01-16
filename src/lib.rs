@@ -74,7 +74,7 @@ mod tests {
         assert_eq!(a.0, expected);
         assert_eq!(a.1 as usize, encoded.len());
 
-        let roundtrip: (T, u8) = decode(&expected).unwrap();
+        let roundtrip: (T, usize) = decode(&expected).unwrap();
         assert_eq!(roundtrip.0, value);
         assert_eq!(roundtrip.1 as usize, encoded.len());
     }
