@@ -9,7 +9,7 @@ use crate::VarIntDecodeError;
 
 mod lookup;
 
-/// Decodes a single varint from the input slice. Requires SSSE3 support.
+/// Decodes a single varint from the input slice.
 ///
 /// Produces a tuple containing the decoded number and the number of bytes read. For best
 /// performance, provide a slice at least 16 bytes in length, or use the unsafe version directly.
@@ -25,8 +25,6 @@ mod lookup;
 /// }
 /// ```
 #[inline]
-#[cfg(any(target_feature = "ssse3", doc))]
-#[cfg_attr(rustc_nightly, doc(cfg(target_feature = "ssse3")))]
 pub fn decode<T: VarIntTarget>(bytes: &[u8]) -> Result<(T, usize), VarIntDecodeError> {
     let result = if bytes.len() >= 16 {
         unsafe { decode_unsafe(bytes.as_ptr()) }
@@ -67,14 +65,12 @@ pub fn decode<T: VarIntTarget>(bytes: &[u8]) -> Result<(T, usize), VarIntDecodeE
 /// }
 /// ```
 #[inline]
-#[cfg(any(target_feature = "ssse3", doc))]
-#[cfg_attr(rustc_nightly, doc(cfg(target_feature = "ssse3")))]
 pub fn decode_zigzag<T: SignedVarIntTarget>(bytes: &[u8]) -> Result<(T, usize), VarIntDecodeError> {
     decode::<T::Unsigned>(bytes).map(|r| (r.0.unzigzag(), r.1))
 }
 
-/// Decodes a single varint from the input pointer. Requires SSSE3 support. Returns a tuple
-/// containing the decoded number and the number of bytes read.
+/// Decodes a single varint from the input pointer. Returns a tuple containing the decoded number
+/// and the number of bytes read.
 ///
 /// # Safety
 /// There must be at least 16 bytes of allocated memory after the beginning of the pointer.
@@ -85,8 +81,6 @@ pub fn decode_zigzag<T: SignedVarIntTarget>(bytes: &[u8]) -> Result<(T, usize), 
 /// You may prefer to use this unsafe interface if you know what you are doing and need a little
 /// extra performance.
 #[inline]
-#[cfg(any(target_feature = "ssse3", doc))]
-#[cfg_attr(rustc_nightly, doc(cfg(target_feature = "ssse3")))]
 pub unsafe fn decode_unsafe<T: VarIntTarget>(bytes: *const u8) -> (T, usize) {
     // It looks like you're trying to understand what this code does. You should probably read
     // this first: https://developers.google.com/protocol-buffers/docs/encoding#varints
