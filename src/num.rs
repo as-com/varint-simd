@@ -6,7 +6,7 @@ use std::arch::x86_64::*;
 use std::fmt::Debug;
 
 /// Represents an unsigned scalar value that can be encoded to and decoded from a varint.
-pub trait VarIntTarget: Debug + Eq + PartialEq + Sized + Copy {
+pub trait VarIntTarget: Debug + Eq + PartialEq + PartialOrd + Sized + Copy {
     /// The signed version of this type
     type Signed: SignedVarIntTarget;
 
@@ -16,6 +16,9 @@ pub trait VarIntTarget: Debug + Eq + PartialEq + Sized + Copy {
     /// The maximum value of the last byte if the varint is MAX_VARINT_BYTES long such that the
     /// varint would not overflow the target
     const MAX_LAST_VARINT_BYTE: u8;
+
+    /// Width of the type in bits
+    const BITS: u32;
 
     /// Converts a 128-bit vector to this number
     ///
@@ -32,6 +35,12 @@ pub trait VarIntTarget: Debug + Eq + PartialEq + Sized + Copy {
     /// Cast from u64 to self
     fn cast_u64(num: u64) -> Self;
 
+    // Cast from self to u64
+    fn to_u64(self) -> u64;
+
+    /// Splits this number into 7-bit segments for encoding
+    fn num_to_scalar_stage1(self) -> u64;
+
     /// Splits this number into 7-bit segments for encoding
     fn num_to_vector_stage1(self) -> [u8; 16];
 
@@ -40,12 +49,16 @@ pub trait VarIntTarget: Debug + Eq + PartialEq + Sized + Copy {
 
     /// ZigZag decodes this value
     fn unzigzag(self) -> Self::Signed;
+
+    /// Count leading zeros
+    fn leading_zeros(self) -> u32;
 }
 
 impl VarIntTarget for u8 {
     type Signed = i8;
     const MAX_VARINT_BYTES: u8 = 2;
     const MAX_LAST_VARINT_BYTE: u8 = 0b00000001;
+    const BITS: u32 = 8;
 
     #[inline(always)]
     fn vector_to_num(res: [u8; 16]) -> Self {
@@ -75,6 +88,25 @@ impl VarIntTarget for u8 {
     #[inline(always)]
     fn cast_u64(num: u64) -> Self {
         num as u8
+    }
+
+    #[inline(always)]
+    fn to_u64(self) -> u64 {
+        self as u64
+    }
+
+    #[inline(always)]
+    #[cfg(all(target_arch = "x86_64", target_feature = "bmi2", fast_pdep))]
+    fn num_to_scalar_stage1(self) -> u64 {
+        let x = self as u64;
+        unsafe { _pdep_u64(x, 0x000000000000017f) }
+    }
+
+    #[inline(always)]
+    #[cfg(not(all(target_arch = "x86_64", target_feature = "bmi2", fast_pdep)))]
+    fn num_to_scalar_stage1(self) -> u64 {
+        let x = self as u64;
+        (x & 0x000000000000007f) | ((x & 0x0000000000000080) << 1)
     }
 
     #[inline(always)]
@@ -108,12 +140,18 @@ impl VarIntTarget for u8 {
     fn unzigzag(self) -> Self::Signed {
         ((self >> 1) ^ (-((self & 1) as i8)) as u8) as i8
     }
+
+    #[inline(always)]
+    fn leading_zeros(self) -> u32 {
+        self.leading_zeros()
+    }
 }
 
 impl VarIntTarget for u16 {
     type Signed = i16;
     const MAX_VARINT_BYTES: u8 = 3;
     const MAX_LAST_VARINT_BYTE: u8 = 0b00000011;
+    const BITS: u32 = 16;
 
     #[inline(always)]
     fn vector_to_num(res: [u8; 16]) -> Self {
@@ -148,6 +186,27 @@ impl VarIntTarget for u16 {
     }
 
     #[inline(always)]
+    fn to_u64(self) -> u64 {
+        self as u64
+    }
+
+    #[inline(always)]
+    #[cfg(all(target_arch = "x86_64", target_feature = "bmi2", fast_pdep))]
+    fn num_to_scalar_stage1(self) -> u64 {
+        let x = self as u64;
+        unsafe { _pdep_u64(x, 0x0000000000037f7f) }
+    }
+
+    #[inline(always)]
+    #[cfg(not(all(target_arch = "x86_64", target_feature = "bmi2", fast_pdep)))]
+    fn num_to_scalar_stage1(self) -> u64 {
+        let x = self as u64;
+        (x & 0x000000000000007f)
+            | ((x & 0x0000000000003f80) << 1)
+            | ((x & 0x000000000000c000) << 2)
+    }
+
+    #[inline(always)]
     #[cfg(all(target_arch = "x86_64", target_feature = "bmi2", fast_pdep))]
     fn num_to_vector_stage1(self) -> [u8; 16] {
         let mut res = [0u64; 2];
@@ -179,12 +238,18 @@ impl VarIntTarget for u16 {
     fn unzigzag(self) -> Self::Signed {
         ((self >> 1) ^ (-((self & 1) as i16)) as u16) as i16
     }
+
+    #[inline(always)]
+    fn leading_zeros(self) -> u32 {
+        self.leading_zeros()
+    }
 }
 
 impl VarIntTarget for u32 {
     type Signed = i32;
     const MAX_VARINT_BYTES: u8 = 5;
     const MAX_LAST_VARINT_BYTE: u8 = 0b00001111;
+    const BITS: u32 = 32;
 
     #[inline(always)]
     fn vector_to_num(res: [u8; 16]) -> Self {
@@ -221,6 +286,29 @@ impl VarIntTarget for u32 {
     }
 
     #[inline(always)]
+    fn to_u64(self) -> u64 {
+        self as u64
+    }
+
+    #[inline(always)]
+    #[cfg(all(target_arch = "x86_64", target_feature = "bmi2", fast_pdep))]
+    fn num_to_scalar_stage1(self) -> u64 {
+        let x = self as u64;
+        unsafe { _pdep_u64(x, 0x0000000f7f7f7f7f) }
+    }
+
+    #[inline(always)]
+    #[cfg(not(all(target_arch = "x86_64", target_feature = "bmi2", fast_pdep)))]
+    fn num_to_scalar_stage1(self) -> u64 {
+        let x = self as u64;
+        (x & 0x000000000000007f)
+            | ((x & 0x0000000000003f80) << 1)
+            | ((x & 0x00000000001fc000) << 2)
+            | ((x & 0x000000000fe00000) << 3)
+            | ((x & 0x00000000f0000000) << 4)
+    }
+
+    #[inline(always)]
     #[cfg(all(target_arch = "x86_64", target_feature = "bmi2", fast_pdep))]
     fn num_to_vector_stage1(self) -> [u8; 16] {
         let mut res = [0u64; 2];
@@ -254,12 +342,18 @@ impl VarIntTarget for u32 {
     fn unzigzag(self) -> Self::Signed {
         ((self >> 1) ^ (-((self & 1) as i32)) as u32) as i32
     }
+
+    #[inline(always)]
+    fn leading_zeros(self) -> u32 {
+        self.leading_zeros()
+    }
 }
 
 impl VarIntTarget for u64 {
     type Signed = i64;
     const MAX_VARINT_BYTES: u8 = 10;
     const MAX_LAST_VARINT_BYTE: u8 = 0b00000001;
+    const BITS: u32 = 64;
 
     fn scalar_to_num(_x: u64) -> Self {
         unimplemented!("destination too wide")
@@ -334,6 +428,10 @@ impl VarIntTarget for u64 {
             // don't forget about bytes spilling to the other word
             | ((y & 0x0000000000000100) << 55)
             | ((y & 0x000000000000007f) << 56)
+    }
+
+    fn num_to_scalar_stage1(self) -> u64 {
+        panic!("source too wide")
     }
 
     #[inline(always)]
@@ -427,6 +525,11 @@ impl VarIntTarget for u64 {
     }
 
     #[inline(always)]
+    fn to_u64(self) -> u64 {
+        self as u64
+    }
+
+    #[inline(always)]
     fn zigzag(from: Self::Signed) -> Self {
         ((from << 1) ^ (from >> 63)) as Self
     }
@@ -434,6 +537,11 @@ impl VarIntTarget for u64 {
     #[inline(always)]
     fn unzigzag(self) -> Self::Signed {
         ((self >> 1) ^ (-((self & 1) as i64)) as u64) as i64
+    }
+
+    #[inline(always)]
+    fn leading_zeros(self) -> u32 {
+        self.leading_zeros()
     }
 }
 
