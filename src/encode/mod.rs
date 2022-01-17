@@ -70,19 +70,15 @@ pub fn encode_to_slice<T: VarIntTarget>(num: T, slice: &mut [u8]) -> u8 {
 #[cfg_attr(rustc_nightly, doc(cfg(target_feature = "sse2")))]
 pub unsafe fn encode_unsafe<T: VarIntTarget>(num: T) -> ([u8; 16], u8) {
     if T::MAX_VARINT_BYTES <= 5 {
-        // dbg!(num);
+        // We could kick off a lzcnt here on the original number but that makes the math complicated and slow
+
         let stage1 = num.num_to_scalar_stage1();
 
-        const USE_CTLZ_NONZERO: bool = false; // (cfg!(target_arch = "x86_64") || cfg!(target_arch = "x86")) && !cfg!(target_feature = "lzcnt") && cfg!(rustc_nightly);
-
-        // guard against undefined behavior on legacy Intel and eliminate a branch ?
-        let leading = (stage1).leading_zeros();
-        // dbg!(leading);
-        // dbg!(stage1);
+        // We could OR the data with 1 to avoid undefined behavior, but for some reason it's still faster to take the branch
+        let leading = stage1.leading_zeros();
 
         let unused_bytes = (leading - 1) / 8;
         let bytes_needed = 8 - unused_bytes;
-        // dbg!(bytes_needed);
 
         // set all but the last MSBs
         let msbs = 0x8080808080808080;
