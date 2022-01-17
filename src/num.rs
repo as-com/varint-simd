@@ -174,9 +174,7 @@ impl VarIntTarget for u16 {
     #[cfg(not(all(target_arch = "x86_64", target_feature = "bmi2", fast_pdep)))]
     fn num_to_scalar_stage1(self) -> u64 {
         let x = self as u64;
-        (x & 0x000000000000007f)
-            | ((x & 0x0000000000003f80) << 1)
-            | ((x & 0x000000000000c000) << 2)
+        (x & 0x000000000000007f) | ((x & 0x0000000000003f80) << 1) | ((x & 0x000000000000c000) << 2)
     }
 
     #[inline(always)]

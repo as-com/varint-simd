@@ -100,7 +100,7 @@ pub unsafe fn encode_unsafe<T: VarIntTarget>(num: T) -> ([u8; 16], u8) {
 
         // Count the number of bytes used
         let bytes = 32 - bits.leading_zeros() as u8; // lzcnt on supported CPUs
-        // TODO: Compiler emits an unnecessary branch here when using bsr/bsl fallback
+                                                     // TODO: Compiler emits an unnecessary branch here when using bsr/bsl fallback
 
         // Fill that many bytes into a vector
         let ascend = _mm_setr_epi8(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);
