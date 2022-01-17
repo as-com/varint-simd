@@ -69,30 +69,54 @@ pub fn encode_to_slice<T: VarIntTarget>(num: T, slice: &mut [u8]) -> u8 {
 #[cfg(any(target_feature = "sse2", doc))]
 #[cfg_attr(rustc_nightly, doc(cfg(target_feature = "sse2")))]
 pub unsafe fn encode_unsafe<T: VarIntTarget>(num: T) -> ([u8; 16], u8) {
-    // Break the number into 7-bit parts and spread them out into a vector
-    let stage1: __m128i = std::mem::transmute(num.num_to_vector_stage1());
+    if T::MAX_VARINT_BYTES <= 5 {
+        // dbg!(num);
+        let stage1 = num.num_to_scalar_stage1();
 
-    // Create a mask for where there exist values
-    // This signed comparison works because all MSBs should be cleared at this point
-    // Also handle the special case when num == 0
-    let minimum = _mm_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xffu8 as i8);
-    let exists = _mm_or_si128(_mm_cmpgt_epi8(stage1, _mm_setzero_si128()), minimum);
-    let bits = _mm_movemask_epi8(exists);
+        const USE_CTLZ_NONZERO: bool = false; // (cfg!(target_arch = "x86_64") || cfg!(target_arch = "x86")) && !cfg!(target_feature = "lzcnt") && cfg!(rustc_nightly);
 
-    // Count the number of bytes used
-    let bytes = 32 - bits.leading_zeros() as u8; // lzcnt on supported CPUs
-                                                 // TODO: Compiler emits an unnecessary branch here when using bsr/bsl fallback
+        // guard against undefined behavior on legacy Intel and eliminate a branch ?
+        let leading = (stage1).leading_zeros();
+        // dbg!(leading);
+        // dbg!(stage1);
 
-    // Fill that many bytes into a vector
-    let ascend = _mm_setr_epi8(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);
-    let mask = _mm_cmplt_epi8(ascend, _mm_set1_epi8(bytes as i8));
+        let unused_bytes = (leading - 1) / 8;
+        let bytes_needed = 8 - unused_bytes;
+        // dbg!(bytes_needed);
 
-    // Shift it down 1 byte so the last MSB is the only one set, and make sure only the MSB is set
-    let shift = _mm_bsrli_si128(mask, 1);
-    let msbmask = _mm_and_si128(shift, _mm_set1_epi8(128u8 as i8));
+        // set all but the last MSBs
+        let msbs = 0x8080808080808080;
+        let msbmask = 0xFFFFFFFFFFFFFFFF >> ((8 - bytes_needed + 1) * 8 - 1);
 
-    // Merge the MSB bits into the vector
-    let merged = _mm_or_si128(stage1, msbmask);
+        let merged = stage1 | (msbs & msbmask);
 
-    (std::mem::transmute(merged), bytes)
+        (std::mem::transmute([merged, 0]), bytes_needed as u8)
+    } else {
+        // Break the number into 7-bit parts and spread them out into a vector
+        let stage1: __m128i = std::mem::transmute(num.num_to_vector_stage1());
+
+        // Create a mask for where there exist values
+        // This signed comparison works because all MSBs should be cleared at this point
+        // Also handle the special case when num == 0
+        let minimum = _mm_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xffu8 as i8);
+        let exists = _mm_or_si128(_mm_cmpgt_epi8(stage1, _mm_setzero_si128()), minimum);
+        let bits = _mm_movemask_epi8(exists);
+
+        // Count the number of bytes used
+        let bytes = 32 - bits.leading_zeros() as u8; // lzcnt on supported CPUs
+        // TODO: Compiler emits an unnecessary branch here when using bsr/bsl fallback
+
+        // Fill that many bytes into a vector
+        let ascend = _mm_setr_epi8(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);
+        let mask = _mm_cmplt_epi8(ascend, _mm_set1_epi8(bytes as i8));
+
+        // Shift it down 1 byte so the last MSB is the only one set, and make sure only the MSB is set
+        let shift = _mm_bsrli_si128(mask, 1);
+        let msbmask = _mm_and_si128(shift, _mm_set1_epi8(128u8 as i8));
+
+        // Merge the MSB bits into the vector
+        let merged = _mm_or_si128(stage1, msbmask);
+
+        (std::mem::transmute(merged), bytes)
+    }
 }
