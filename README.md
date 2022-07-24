@@ -151,7 +151,8 @@ feature in this crate.
 
 ## Previous Work
 
-* Daniel Lemire, et. al. - Stream VByte: Faster Byte-Oriented Integer Compression: https://arxiv.org/abs/1709.08990
+* Daniel Lemire, Nathan Kurz, Christoph Rupp - Stream VByte: Faster Byte-Oriented Integer Compression, Information Processing Letters 130, 2018: https://arxiv.org/abs/1709.08990
+* Jeff Plaisance, Nathan Kurz, Daniel Lemire - Vectorized VByte Decoding, International Symposium on Web Algorithms, 2015: https://arxiv.org/abs/1503.07387
 
 ## License
 
