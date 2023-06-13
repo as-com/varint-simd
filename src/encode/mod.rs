@@ -1,7 +1,7 @@
 #[cfg(target_arch = "x86")]
-use std::arch::x86::*;
+use core::arch::x86::*;
 #[cfg(target_arch = "x86_64")]
-use std::arch::x86_64::*;
+use core::arch::x86_64::*;
 
 use crate::num::{SignedVarIntTarget, VarIntTarget};
 
@@ -86,10 +86,10 @@ pub unsafe fn encode_unsafe<T: VarIntTarget>(num: T) -> ([u8; 16], u8) {
 
         let merged = stage1 | (msbs & msbmask);
 
-        (std::mem::transmute([merged, 0]), bytes_needed as u8)
+        (core::mem::transmute([merged, 0]), bytes_needed as u8)
     } else {
         // Break the number into 7-bit parts and spread them out into a vector
-        let stage1: __m128i = std::mem::transmute(num.num_to_vector_stage1());
+        let stage1: __m128i = core::mem::transmute(num.num_to_vector_stage1());
 
         // Create a mask for where there exist values
         // This signed comparison works because all MSBs should be cleared at this point
@@ -113,6 +113,6 @@ pub unsafe fn encode_unsafe<T: VarIntTarget>(num: T) -> ([u8; 16], u8) {
         // Merge the MSB bits into the vector
         let merged = _mm_or_si128(stage1, msbmask);
 
-        (std::mem::transmute(merged), bytes)
+        (core::mem::transmute(merged), bytes)
     }
 }

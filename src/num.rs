@@ -1,9 +1,9 @@
 #[cfg(target_arch = "x86")]
-use std::arch::x86::*;
+use core::arch::x86::*;
 #[cfg(target_arch = "x86_64")]
-use std::arch::x86_64::*;
+use core::arch::x86_64::*;
 
-use std::fmt::Debug;
+use core::fmt::Debug;
 
 /// Represents an unsigned scalar value that can be encoded to and decoded from a varint.
 pub trait VarIntTarget: Debug + Eq + PartialEq + PartialOrd + Sized + Copy {
@@ -52,7 +52,7 @@ impl VarIntTarget for u8 {
 
     #[inline(always)]
     fn vector_to_num(res: [u8; 16]) -> Self {
-        let res: [u64; 2] = unsafe { std::mem::transmute(res) };
+        let res: [u64; 2] = unsafe { core::mem::transmute(res) };
         let x = res[0];
 
         Self::scalar_to_num(x)
@@ -102,7 +102,7 @@ impl VarIntTarget for u8 {
 
         res[0] = self.num_to_scalar_stage1();
 
-        unsafe { std::mem::transmute(res) }
+        unsafe { core::mem::transmute(res) }
     }
 
     #[inline(always)]
@@ -112,7 +112,7 @@ impl VarIntTarget for u8 {
 
         res[0] = self.num_to_scalar_stage1();
 
-        unsafe { std::mem::transmute(res) }
+        unsafe { core::mem::transmute(res) }
     }
 
     #[inline(always)]
@@ -133,7 +133,7 @@ impl VarIntTarget for u16 {
 
     #[inline(always)]
     fn vector_to_num(res: [u8; 16]) -> Self {
-        let arr: [u64; 2] = unsafe { std::mem::transmute(res) };
+        let arr: [u64; 2] = unsafe { core::mem::transmute(res) };
         let x = arr[0];
 
         Self::scalar_to_num(x)
@@ -185,7 +185,7 @@ impl VarIntTarget for u16 {
 
         res[0] = self.num_to_scalar_stage1();
 
-        unsafe { std::mem::transmute(res) }
+        unsafe { core::mem::transmute(res) }
     }
 
     #[inline(always)]
@@ -194,7 +194,7 @@ impl VarIntTarget for u16 {
         let mut res = [0u64; 2];
         res[0] = self.num_to_scalar_stage1();
 
-        unsafe { std::mem::transmute(res) }
+        unsafe { core::mem::transmute(res) }
     }
 
     #[inline(always)]
@@ -215,7 +215,7 @@ impl VarIntTarget for u32 {
 
     #[inline(always)]
     fn vector_to_num(res: [u8; 16]) -> Self {
-        let arr: [u64; 2] = unsafe { std::mem::transmute(res) };
+        let arr: [u64; 2] = unsafe { core::mem::transmute(res) };
         let x = arr[0];
 
         Self::scalar_to_num(x)
@@ -273,7 +273,7 @@ impl VarIntTarget for u32 {
 
         res[0] = self.num_to_scalar_stage1();
 
-        unsafe { std::mem::transmute(res) }
+        unsafe { core::mem::transmute(res) }
     }
 
     #[inline(always)]
@@ -282,7 +282,7 @@ impl VarIntTarget for u32 {
         let mut res = [0u64; 2];
         res[0] = self.num_to_scalar_stage1();
 
-        unsafe { std::mem::transmute(res) }
+        unsafe { core::mem::transmute(res) }
     }
 
     #[inline(always)]
@@ -308,7 +308,7 @@ impl VarIntTarget for u64 {
     #[inline(always)]
     #[cfg(all(target_feature = "bmi2", fast_pdep))]
     fn vector_to_num(res: [u8; 16]) -> Self {
-        let arr: [u64; 2] = unsafe { std::mem::transmute(res) };
+        let arr: [u64; 2] = unsafe { core::mem::transmute(res) };
 
         let x = arr[0];
         let y = arr[1];
@@ -328,14 +328,14 @@ impl VarIntTarget for u64 {
         res[0] = unsafe { _pdep_u64(x, 0x7f7f7f7f7f7f7f7f) };
         res[1] = unsafe { _pdep_u64(x >> 56, 0x000000000000017f) };
 
-        unsafe { std::mem::transmute(res) }
+        unsafe { core::mem::transmute(res) }
     }
 
     #[inline(always)]
     #[cfg(all(target_feature = "avx2", not(all(target_feature = "bmi2", fast_pdep))))]
     fn vector_to_num(res: [u8; 16]) -> Self {
         let pt1 = unsafe {
-            let b = std::mem::transmute(res);
+            let b = core::mem::transmute(res);
 
             let c = _mm_broadcastq_epi64(b);
             let d = _mm_or_si128(
@@ -365,7 +365,7 @@ impl VarIntTarget for u64 {
             _mm_extract_epi64(e, 0) as u64
         };
 
-        let arr: [u64; 2] = unsafe { std::mem::transmute(res) };
+        let arr: [u64; 2] = unsafe { core::mem::transmute(res) };
 
         let y = arr[1];
 
@@ -416,13 +416,13 @@ impl VarIntTarget for u64 {
         res[0] = unsafe { _mm_extract_epi64(d, 0) as u64 };
         res[1] = ((x & 0x7f00000000000000) >> 56) | ((x & 0x8000000000000000) >> 55);
 
-        unsafe { std::mem::transmute(res) }
+        unsafe { core::mem::transmute(res) }
     }
 
     #[inline(always)]
     #[cfg(not(any(target_feature = "avx2", all(target_feature = "bmi2", fast_pdep))))]
     fn vector_to_num(res: [u8; 16]) -> Self {
-        let arr: [u64; 2] = unsafe { std::mem::transmute(res) };
+        let arr: [u64; 2] = unsafe { core::mem::transmute(res) };
 
         let x = arr[0];
         let y = arr[1];
@@ -457,7 +457,7 @@ impl VarIntTarget for u64 {
             | ((x & 0x00fe000000000000) << 7);
         res[1] = ((x & 0x7f00000000000000) >> 56) | ((x & 0x8000000000000000) >> 55);
 
-        unsafe { std::mem::transmute(res) }
+        unsafe { core::mem::transmute(res) }
     }
 
     #[inline(always)]
