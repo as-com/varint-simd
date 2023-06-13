@@ -5,15 +5,16 @@ encoder and decoder written in Rust.
 **For more information, please see the [README](https://github.com/as-com/varint-simd#readme).**
 */
 
+#![cfg_attr(not(feature = "std"), no_std)]
 #![cfg_attr(rustc_nightly, feature(doc_cfg))]
 
 #[cfg(target_arch = "x86")]
-use std::arch::x86::*;
+use core::arch::x86::*;
 
 #[cfg(target_arch = "x86_64")]
-use std::arch::x86_64::*;
+use core::arch::x86_64::*;
 
-use std::fmt::Debug;
+use core::fmt::Debug;
 
 pub mod decode;
 pub mod encode;
@@ -28,12 +29,12 @@ pub use num::*;
 // Functions to help with debugging
 #[allow(dead_code)]
 fn slice_m128i(n: __m128i) -> [u8; 16] {
-    unsafe { std::mem::transmute(n) }
+    unsafe { core::mem::transmute(n) }
 }
 
 #[allow(dead_code)]
 fn slice_m256i(n: __m256i) -> [i8; 32] {
-    unsafe { std::mem::transmute(n) }
+    unsafe { core::mem::transmute(n) }
 }
 
 #[derive(Debug)]
@@ -42,12 +43,13 @@ pub enum VarIntDecodeError {
     NotEnoughBytes,
 }
 
-impl std::fmt::Display for VarIntDecodeError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Debug::fmt(self, f)
+impl core::fmt::Display for VarIntDecodeError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        core::fmt::Debug::fmt(self, f)
     }
 }
 
+#[cfg(feature = "std")]
 impl std::error::Error for VarIntDecodeError {}
 
 #[cfg(test)]

@@ -1,8 +1,8 @@
 #[cfg(target_arch = "x86")]
-use std::arch::x86::*;
+use core::arch::x86::*;
 #[cfg(target_arch = "x86_64")]
-use std::arch::x86_64::*;
-use std::cmp::min;
+use core::arch::x86_64::*;
+use core::cmp::min;
 
 use crate::num::{SignedVarIntTarget, VarIntTarget};
 use crate::VarIntDecodeError;
@@ -31,7 +31,7 @@ pub fn decode<T: VarIntTarget>(bytes: &[u8]) -> Result<(T, usize), VarIntDecodeE
     } else if !bytes.is_empty() {
         let mut data = [0u8; 16];
         let len = min(16, bytes.len());
-        // unsafe { std::ptr::copy_nonoverlapping(bytes.as_ptr(), data.as_mut_ptr(), len); }
+        // unsafe { core::ptr::copy_nonoverlapping(bytes.as_ptr(), data.as_mut_ptr(), len); }
         data[..len].copy_from_slice(&bytes[..len]);
         unsafe { decode_unsafe(data.as_ptr()) }
     } else {
@@ -135,7 +135,7 @@ pub unsafe fn decode_unsafe<T: VarIntTarget>(bytes: *const u8) -> (T, usize) {
         // let varint_part0 = b0 & !(0xffffffffffffffff << len0.min(63));
         // let varint_part1 = b1 & !(0xffffffffffffffff << (((msbs0 == 0) as u32) * len1.min(63)));
 
-        let num = T::vector_to_num(std::mem::transmute([varint_part0, varint_part1]));
+        let num = T::vector_to_num(core::mem::transmute([varint_part0, varint_part1]));
         let len = if msbs0 == 0 { len1 + 64 } else { len0 } / 8;
 
         (num, len as usize)
@@ -167,8 +167,8 @@ pub unsafe fn decode_two_unsafe<T: VarIntTarget, U: VarIntTarget>(
         // check will be eliminated at compile time
         panic!(
             "exceeded length limit: cannot decode {} and {}, total length {} exceeds 16 bytes",
-            std::any::type_name::<T>(),
-            std::any::type_name::<U>(),
+            core::any::type_name::<T>(),
+            core::any::type_name::<U>(),
             T::MAX_VARINT_BYTES + U::MAX_VARINT_BYTES
         );
     }
@@ -219,13 +219,13 @@ pub unsafe fn decode_two_unsafe<T: VarIntTarget, U: VarIntTarget>(
             dual_u32_stage2(comb)
         };
 
-        let x: [u32; 4] = std::mem::transmute(x);
+        let x: [u32; 4] = core::mem::transmute(x);
         // _mm_extract_epi32 requires SSE4.1
         first_num = T::cast_u32(x[0]);
         second_num = U::cast_u32(x[2]);
     } else {
-        first_num = T::vector_to_num(std::mem::transmute(first));
-        second_num = U::vector_to_num(std::mem::transmute(second));
+        first_num = T::vector_to_num(core::mem::transmute(first));
+        second_num = U::vector_to_num(core::mem::transmute(second));
     }
 
     (first_num, second_num, first_len as u8, second_len as u8)
@@ -264,13 +264,13 @@ unsafe fn decode_two_u32_unsafe<T: VarIntTarget, U: VarIntTarget>(
             dual_u32_stage2(comb)
         };
 
-        let x: [u32; 4] = std::mem::transmute(x);
+        let x: [u32; 4] = core::mem::transmute(x);
         // _mm_extract_epi32 requires SSE4.1
         first_num = T::cast_u32(x[0]);
         second_num = U::cast_u32(x[2]);
     } else {
-        first_num = T::vector_to_num(std::mem::transmute(comb));
-        second_num = U::vector_to_num(std::mem::transmute(_mm_bsrli_si128(comb, 8)));
+        first_num = T::vector_to_num(core::mem::transmute(comb));
+        second_num = U::vector_to_num(core::mem::transmute(_mm_bsrli_si128(comb, 8)));
     }
 
     (first_num, second_num, first_len as u8, second_len as u8)
@@ -461,8 +461,8 @@ pub unsafe fn decode_two_wide_unsafe<T: VarIntTarget, U: VarIntTarget>(
         first_num = T::cast_u64(_mm_extract_epi64(x, 0) as u64);
         second_num = U::cast_u64(_mm_extract_epi64(x, 1) as u64);
     } else {
-        first_num = T::vector_to_num(std::mem::transmute(first));
-        second_num = U::vector_to_num(std::mem::transmute(second));
+        first_num = T::vector_to_num(core::mem::transmute(first));
+        second_num = U::vector_to_num(core::mem::transmute(second));
     }
 
     (first_num, second_num, first_len as u8, second_len as u8)
@@ -496,10 +496,10 @@ pub unsafe fn decode_four_unsafe<
         // check will be eliminated at compile time
         panic!(
             "exceeded length limit: cannot decode {}, {}, {}, and {}, total length {} exceeds 16 bytes",
-            std::any::type_name::<T>(),
-            std::any::type_name::<U>(),
-            std::any::type_name::<V>(),
-            std::any::type_name::<W>(),
+            core::any::type_name::<T>(),
+            core::any::type_name::<U>(),
+            core::any::type_name::<V>(),
+            core::any::type_name::<W>(),
             T::MAX_VARINT_BYTES + U::MAX_VARINT_BYTES + V::MAX_VARINT_BYTES + W::MAX_VARINT_BYTES
         );
     }
@@ -592,17 +592,17 @@ pub unsafe fn decode_four_unsafe<
             )
         };
 
-        let x: [u32; 4] = std::mem::transmute(x);
+        let x: [u32; 4] = core::mem::transmute(x);
         // _mm_extract_epi32 requires SSE4.1
         first_num = T::cast_u32(x[0]);
         second_num = U::cast_u32(x[1]);
         third_num = V::cast_u32(x[2]);
         fourth_num = W::cast_u32(x[3]);
     } else {
-        first_num = T::vector_to_num(std::mem::transmute(first));
-        second_num = U::vector_to_num(std::mem::transmute(second));
-        third_num = V::vector_to_num(std::mem::transmute(third));
-        fourth_num = W::vector_to_num(std::mem::transmute(fourth));
+        first_num = T::vector_to_num(core::mem::transmute(first));
+        second_num = U::vector_to_num(core::mem::transmute(second));
+        third_num = V::vector_to_num(core::mem::transmute(third));
+        fourth_num = W::vector_to_num(core::mem::transmute(fourth));
     }
 
     (
@@ -679,17 +679,17 @@ unsafe fn decode_four_u16_unsafe<
             )
         };
 
-        let x: [u32; 4] = std::mem::transmute(x);
+        let x: [u32; 4] = core::mem::transmute(x);
         // _mm_extract_epi32 requires SSE4.1
         first_num = T::cast_u32(x[0]);
         second_num = U::cast_u32(x[1]);
         third_num = V::cast_u32(x[2]);
         fourth_num = W::cast_u32(x[3]);
     } else {
-        first_num = T::vector_to_num(std::mem::transmute(comb));
-        second_num = U::vector_to_num(std::mem::transmute(_mm_bsrli_si128(comb, 4)));
-        third_num = V::vector_to_num(std::mem::transmute(_mm_bsrli_si128(comb, 8)));
-        fourth_num = W::vector_to_num(std::mem::transmute(_mm_bsrli_si128(comb, 12)));
+        first_num = T::vector_to_num(core::mem::transmute(comb));
+        second_num = U::vector_to_num(core::mem::transmute(_mm_bsrli_si128(comb, 4)));
+        third_num = V::vector_to_num(core::mem::transmute(_mm_bsrli_si128(comb, 8)));
+        fourth_num = W::vector_to_num(core::mem::transmute(_mm_bsrli_si128(comb, 12)));
     }
 
     (
@@ -790,7 +790,7 @@ pub unsafe fn decode_eight_u8_unsafe(bytes: *const u8) -> ([u8; 8], u8) {
     cumul_lens = _mm_add_epi8(cumul_lens, _mm_bslli_si128(cumul_lens, 4));
     cumul_lens = _mm_add_epi8(cumul_lens, _mm_bslli_si128(cumul_lens, 8));
 
-    let cumul_lens_2: [u8; 16] = std::mem::transmute(cumul_lens);
+    let cumul_lens_2: [u8; 16] = core::mem::transmute(cumul_lens);
     let last_len = 8 - cumul_lens_2[7] + 8;
 
     // Set one-lengthed second bytes to negative
@@ -819,7 +819,7 @@ pub unsafe fn decode_eight_u8_unsafe(bytes: *const u8) -> ([u8; 8], u8) {
         x,
         _mm_setr_epi8(0, 2, 4, 6, 8, 10, 12, 14, -1, -1, -1, -1, -1, -1, -1, -1),
     );
-    let lower: [u64; 2] = std::mem::transmute(shuf);
+    let lower: [u64; 2] = core::mem::transmute(shuf);
     let nums = lower[0].to_ne_bytes();
 
     (nums, last_len)
