@@ -273,7 +273,7 @@ unsafe fn decode_two_u32_unsafe<T: VarIntTarget, U: VarIntTarget>(
         second_num = U::vector_to_num(core::mem::transmute(_mm_bsrli_si128(comb, 8)));
     }
 
-    (first_num, second_num, first_len as u8, second_len as u8)
+    (first_num, second_num, first_len, second_len)
 }
 
 #[inline(always)]
