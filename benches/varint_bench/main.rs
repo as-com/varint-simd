@@ -1,4 +1,3 @@
-use bytes::Buf;
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion, Throughput};
 use integer_encoding::VarInt;
 use rand::distributions::{Distribution, Standard};
@@ -7,6 +6,8 @@ use varint_simd::{
     decode,
     decode_eight_u8_unsafe,
     decode_four_unsafe,
+    decode_len,
+    decode_len_unsafe,
     decode_two_unsafe, //decode_two_wide_unsafe,
     decode_unsafe,
     encode,
@@ -34,6 +35,32 @@ where
             idx += len;
         }
         (encoded, vec![Default::default(); C])
+    }
+}
+
+#[inline(always)]
+fn decode_len_batched_varint_simd<T: VarIntTarget, const C: usize>(input: &mut (Vec<u8>, Vec<T>)) {
+    let data = &input.0;
+
+    let mut slice = &data[..];
+    for _ in 0..C {
+        // SAFETY: the input slice should have at least 16 bytes of allocated padding at the end
+        let len = decode_len::<T>(slice).unwrap();
+        slice = &slice[len..];
+    }
+}
+
+#[inline(always)]
+fn decode_len_batched_varint_simd_unsafe<T: VarIntTarget, const C: usize>(
+    input: &mut (Vec<u8>, Vec<T>),
+) {
+    let data = &input.0;
+
+    let mut slice = &data[..];
+    for _ in 0..C {
+        // SAFETY: the input slice should have at least 16 bytes of allocated padding at the end
+        let len = unsafe { decode_len_unsafe::<T>(slice.as_ptr()) };
+        slice = &slice[len..];
     }
 }
 
@@ -215,6 +242,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("varint-u8/decode");
     group.throughput(Throughput::Elements(SEQUENCE_LEN as u64));
+
     group.bench_function("integer-encoding", |b| {
         b.iter_batched_ref(
             create_batched_encoded_generator::<u8, _, SEQUENCE_LEN>(&mut rng),
@@ -278,6 +306,26 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             BatchSize::SmallInput,
         )
     });
+    group.finish();
+
+    let mut group = c.benchmark_group("varint-u8/decode_len");
+    group.throughput(Throughput::Elements(SEQUENCE_LEN as u64));
+    group.bench_function("varint-simd/unsafe", |b| {
+        b.iter_batched_ref(
+            create_batched_encoded_generator::<u8, _, SEQUENCE_LEN>(&mut rng),
+            decode_len_batched_varint_simd_unsafe::<u8, SEQUENCE_LEN>,
+            BatchSize::SmallInput,
+        )
+    });
+
+    group.bench_function("varint-simd/safe", |b| {
+        b.iter_batched_ref(
+            create_batched_encoded_generator::<u8, _, SEQUENCE_LEN>(&mut rng),
+            decode_len_batched_varint_simd::<u8, SEQUENCE_LEN>,
+            BatchSize::SmallInput,
+        )
+    });
+
     group.finish();
 
     let mut group = c.benchmark_group("varint-u8/encode");
