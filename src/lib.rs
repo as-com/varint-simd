@@ -57,8 +57,8 @@ mod tests {
     #[cfg(target_feature = "avx2")]
     use crate::decode_two_wide_unsafe;
     use crate::{
-        decode, decode_eight_u8_unsafe, decode_four_unsafe, decode_two_unsafe, encode,
-        encode_to_slice, VarIntTarget,
+        decode, decode_len, decode_eight_u8_unsafe, decode_four_unsafe, decode_two_unsafe, encode,
+        encode_to_slice, VarIntTarget
     };
 
     use lazy_static::lazy_static;
@@ -79,6 +79,9 @@ mod tests {
         let roundtrip: (T, usize) = decode(&expected).unwrap();
         assert_eq!(roundtrip.0, value);
         assert_eq!(roundtrip.1 as usize, encoded.len());
+
+        let len = decode_len::<T>(&expected).unwrap();
+        assert_eq!(len, encoded.len());
     }
 
     // Test cases borrowed from prost
