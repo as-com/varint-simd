@@ -54,7 +54,7 @@ impl std::error::Error for VarIntDecodeError {}
 
 #[cfg(test)]
 mod tests {
-    #[cfg(any(target_feature = "avx2"))]
+    #[cfg(target_feature = "avx2")]
     use crate::decode_two_wide_unsafe;
     use crate::{
         decode, decode_eight_u8_unsafe, decode_four_unsafe, decode_two_unsafe, encode,
@@ -222,7 +222,7 @@ mod tests {
         }
     }
 
-    #[cfg(any(target_feature = "avx2"))]
+    #[cfg(target_feature = "avx2")]
     fn check_decode_wide_2x<T: VarIntTarget, U: VarIntTarget>(a: &[T], b: &[U]) {
         for i in a {
             for j in b {
@@ -271,7 +271,7 @@ mod tests {
                         assert_eq!(decoded.5, second_len);
                         assert_eq!(decoded.6, third_len);
                         assert_eq!(decoded.7, fourth_len);
-                        assert_eq!(decoded.8, false);
+                        assert!(!decoded.8);
                     }
                 }
             }
@@ -345,7 +345,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(any(target_feature = "avx2"))]
+    #[cfg(target_feature = "avx2")]
     fn test_decode_2x_wide_u8_x() {
         check_decode_wide_2x::<u8, u8>(&NUMS_U8[..], &NUMS_U8[..]);
         check_decode_wide_2x::<u8, u16>(&NUMS_U8[..], &NUMS_U16[..]);
@@ -362,7 +362,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(any(target_feature = "avx2"))]
+    #[cfg(target_feature = "avx2")]
     fn test_decode_2x_wide_u16_x() {
         check_decode_wide_2x::<u16, u8>(&NUMS_U16[..], &NUMS_U8[..]);
         check_decode_wide_2x::<u16, u16>(&NUMS_U16[..], &NUMS_U16[..]);
@@ -379,7 +379,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(any(target_feature = "avx2"))]
+    #[cfg(target_feature = "avx2")]
     fn test_decode_2x_wide_u32_x() {
         check_decode_wide_2x::<u32, u8>(&NUMS_U32[..], &NUMS_U8[..]);
         check_decode_wide_2x::<u32, u16>(&NUMS_U32[..], &NUMS_U16[..]);
@@ -396,7 +396,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(any(target_feature = "avx2"))]
+    #[cfg(target_feature = "avx2")]
     fn test_decode_2x_wide_u64_x() {
         check_decode_wide_2x::<u64, u8>(&NUMS_U64[..], &NUMS_U8[..]);
         check_decode_wide_2x::<u64, u16>(&NUMS_U64[..], &NUMS_U16[..]);

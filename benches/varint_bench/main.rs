@@ -76,7 +76,7 @@ fn decode_batched_varint_simd_unsafe<T: VarIntTarget, const C: usize>(
         // SAFETY: the input slice should have at least 16 bytes of allocated padding at the end
         let (num, len) = unsafe { decode_unsafe::<T>(slice.as_ptr()) };
         out[i] = num;
-        slice = &slice[(len as usize)..];
+        slice = &slice[len..];
     }
 }
 
@@ -153,7 +153,7 @@ fn decode_batched_varint_simd_safe<T: VarIntTarget, const C: usize>(input: &mut 
     for i in 0..C {
         let (num, len) = decode::<T>(slice).unwrap();
         out[i] = num;
-        slice = &slice[(len as usize)..];
+        slice = &slice[len..];
     }
 }
 
@@ -366,7 +366,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     });
 
     group.bench_function("varint-simd", |b| {
-        b.iter_batched(|| rng.gen::<u8>(), |num| encode(num), BatchSize::SmallInput)
+        b.iter_batched(|| rng.gen::<u8>(), encode, BatchSize::SmallInput)
     });
     group.finish();
 
@@ -470,7 +470,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     group.bench_function("varint-simd", |b| {
         b.iter_batched(
             || rng.gen::<u16>(),
-            |num| encode(num),
+            encode,
             BatchSize::SmallInput,
         )
     });
@@ -567,7 +567,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     group.bench_function("varint-simd", |b| {
         b.iter_batched(
             || rng.gen::<u32>(),
-            |num| encode(num),
+            encode,
             BatchSize::SmallInput,
         )
     });
@@ -656,7 +656,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             || rng.gen::<u64>(),
             |num| {
                 target.clear();
-                prost_varint::encode_varint(num as u64, &mut target)
+                prost_varint::encode_varint(num, &mut target)
             },
             BatchSize::SmallInput,
         )
@@ -665,7 +665,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     group.bench_function("varint-simd", |b| {
         b.iter_batched(
             || rng.gen::<u64>(),
-            |num| encode(num),
+            encode,
             BatchSize::SmallInput,
         )
     });
