@@ -57,8 +57,8 @@ mod tests {
     #[cfg(target_feature = "avx2")]
     use crate::decode_two_wide_unsafe;
     use crate::{
-        decode, decode_len, decode_eight_u8_unsafe, decode_four_unsafe, decode_two_unsafe, encode,
-        encode_to_slice, VarIntTarget
+        decode, decode_eight_u8_unsafe, decode_four_unsafe, decode_len, decode_two_unsafe, encode,
+        encode_to_slice, VarIntTarget,
     };
 
     use lazy_static::lazy_static;

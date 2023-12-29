@@ -468,11 +468,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     });
 
     group.bench_function("varint-simd", |b| {
-        b.iter_batched(
-            || rng.gen::<u16>(),
-            encode,
-            BatchSize::SmallInput,
-        )
+        b.iter_batched(|| rng.gen::<u16>(), encode, BatchSize::SmallInput)
     });
     group.finish();
 
@@ -565,11 +561,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     });
 
     group.bench_function("varint-simd", |b| {
-        b.iter_batched(
-            || rng.gen::<u32>(),
-            encode,
-            BatchSize::SmallInput,
-        )
+        b.iter_batched(|| rng.gen::<u32>(), encode, BatchSize::SmallInput)
     });
     group.finish();
 
@@ -663,11 +655,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     });
 
     group.bench_function("varint-simd", |b| {
-        b.iter_batched(
-            || rng.gen::<u64>(),
-            encode,
-            BatchSize::SmallInput,
-        )
+        b.iter_batched(|| rng.gen::<u64>(), encode, BatchSize::SmallInput)
     });
     group.finish();
 }
