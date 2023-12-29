@@ -51,6 +51,35 @@ pub fn decode<T: VarIntTarget>(bytes: &[u8]) -> Result<(T, usize), VarIntDecodeE
     }
 }
 
+/// Decodes only the length of a single variant from the input slice.
+///
+/// # Examples
+/// ```
+/// use varint_simd::{decode_len, VarIntDecodeError};
+///
+/// fn main() -> Result<(), VarIntDecodeError> {
+///     let decoded = decode_len::<u32>(&[185, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])?;
+///     assert_eq!(decoded, 2);
+///     Ok(())
+/// }
+/// ```
+#[inline]
+pub fn decode_len<T: VarIntTarget>(bytes: &[u8]) -> Result<usize, VarIntDecodeError> {
+    let result = if bytes.len() >= 16 {
+        unsafe { decode_len_unsafe::<T>(bytes.as_ptr()) }
+    } else if !bytes.is_empty() {
+        let mut data = [0u8; 16];
+        let len = min(16, bytes.len());
+        // unsafe { core::ptr::copy_nonoverlapping(bytes.as_ptr(), data.as_mut_ptr(), len); }
+        data[..len].copy_from_slice(&bytes[..len]);
+        unsafe { decode_len_unsafe::<T>(data.as_ptr()) }
+    } else {
+        return Err(VarIntDecodeError::NotEnoughBytes);
+    };
+
+    Ok(result)
+}
+
 /// Convenience function for decoding a single varint in ZigZag format from the input slice.
 /// See also: [`decode`]
 ///
@@ -67,6 +96,32 @@ pub fn decode<T: VarIntTarget>(bytes: &[u8]) -> Result<(T, usize), VarIntDecodeE
 #[inline]
 pub fn decode_zigzag<T: SignedVarIntTarget>(bytes: &[u8]) -> Result<(T, usize), VarIntDecodeError> {
     decode::<T::Unsigned>(bytes).map(|r| (r.0.unzigzag(), r.1))
+}
+
+/// Decodes the length of the next integer
+///
+/// # Safety
+/// Same as `decode_unsafe`
+#[inline]
+pub unsafe fn decode_len_unsafe<T: VarIntTarget>(bytes: *const u8) -> usize {
+    if T::MAX_VARINT_BYTES <= 5 {
+        let b = bytes.cast::<u64>().read_unaligned();
+        let msbs = !b & !0x7f7f7f7f7f7f7f7f;
+        let len = msbs.trailing_zeros() + 1; // in bits
+        (len / 8) as usize
+    } else {
+        let b0 = bytes.cast::<u64>().read_unaligned();
+        let b1 = bytes.cast::<u64>().add(1).read_unaligned();
+
+        let msbs0 = !b0 & !0x7f7f7f7f7f7f7f7f;
+        let msbs1 = !b1 & !0x7f7f7f7f7f7f7f7f;
+
+        let len0 = msbs0.trailing_zeros() + 1;
+        let len1 = msbs1.trailing_zeros() + 1;
+
+        let len = if msbs0 == 0 { len1 + 64 } else { len0 };
+        len as usize / 8
+    }
 }
 
 /// Decodes a single varint from the input pointer. Returns a tuple containing the decoded number

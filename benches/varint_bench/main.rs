@@ -1,4 +1,3 @@
-use bytes::Buf;
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion, Throughput};
 use integer_encoding::VarInt;
 use rand::distributions::{Distribution, Standard};
@@ -7,6 +6,8 @@ use varint_simd::{
     decode,
     decode_eight_u8_unsafe,
     decode_four_unsafe,
+    decode_len,
+    decode_len_unsafe,
     decode_two_unsafe, //decode_two_wide_unsafe,
     decode_unsafe,
     encode,
@@ -38,6 +39,32 @@ where
 }
 
 #[inline(always)]
+fn decode_len_batched_varint_simd<T: VarIntTarget, const C: usize>(input: &mut (Vec<u8>, Vec<T>)) {
+    let data = &input.0;
+
+    let mut slice = &data[..];
+    for _ in 0..C {
+        // SAFETY: the input slice should have at least 16 bytes of allocated padding at the end
+        let len = decode_len::<T>(slice).unwrap();
+        slice = &slice[len..];
+    }
+}
+
+#[inline(always)]
+fn decode_len_batched_varint_simd_unsafe<T: VarIntTarget, const C: usize>(
+    input: &mut (Vec<u8>, Vec<T>),
+) {
+    let data = &input.0;
+
+    let mut slice = &data[..];
+    for _ in 0..C {
+        // SAFETY: the input slice should have at least 16 bytes of allocated padding at the end
+        let len = unsafe { decode_len_unsafe::<T>(slice.as_ptr()) };
+        slice = &slice[len..];
+    }
+}
+
+#[inline(always)]
 fn decode_batched_varint_simd_unsafe<T: VarIntTarget, const C: usize>(
     input: &mut (Vec<u8>, Vec<T>),
 ) {
@@ -49,7 +76,7 @@ fn decode_batched_varint_simd_unsafe<T: VarIntTarget, const C: usize>(
         // SAFETY: the input slice should have at least 16 bytes of allocated padding at the end
         let (num, len) = unsafe { decode_unsafe::<T>(slice.as_ptr()) };
         out[i] = num;
-        slice = &slice[(len as usize)..];
+        slice = &slice[len..];
     }
 }
 
@@ -126,7 +153,7 @@ fn decode_batched_varint_simd_safe<T: VarIntTarget, const C: usize>(input: &mut 
     for i in 0..C {
         let (num, len) = decode::<T>(slice).unwrap();
         out[i] = num;
-        slice = &slice[(len as usize)..];
+        slice = &slice[len..];
     }
 }
 
@@ -215,6 +242,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("varint-u8/decode");
     group.throughput(Throughput::Elements(SEQUENCE_LEN as u64));
+
     group.bench_function("integer-encoding", |b| {
         b.iter_batched_ref(
             create_batched_encoded_generator::<u8, _, SEQUENCE_LEN>(&mut rng),
@@ -280,6 +308,26 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     });
     group.finish();
 
+    let mut group = c.benchmark_group("varint-u8/decode_len");
+    group.throughput(Throughput::Elements(SEQUENCE_LEN as u64));
+    group.bench_function("varint-simd/unsafe", |b| {
+        b.iter_batched_ref(
+            create_batched_encoded_generator::<u8, _, SEQUENCE_LEN>(&mut rng),
+            decode_len_batched_varint_simd_unsafe::<u8, SEQUENCE_LEN>,
+            BatchSize::SmallInput,
+        )
+    });
+
+    group.bench_function("varint-simd/safe", |b| {
+        b.iter_batched_ref(
+            create_batched_encoded_generator::<u8, _, SEQUENCE_LEN>(&mut rng),
+            decode_len_batched_varint_simd::<u8, SEQUENCE_LEN>,
+            BatchSize::SmallInput,
+        )
+    });
+
+    group.finish();
+
     let mut group = c.benchmark_group("varint-u8/encode");
     group.throughput(Throughput::Elements(1));
     group.bench_function("integer-encoding", |b| {
@@ -318,7 +366,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     });
 
     group.bench_function("varint-simd", |b| {
-        b.iter_batched(|| rng.gen::<u8>(), |num| encode(num), BatchSize::SmallInput)
+        b.iter_batched(|| rng.gen::<u8>(), encode, BatchSize::SmallInput)
     });
     group.finish();
 
@@ -420,11 +468,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     });
 
     group.bench_function("varint-simd", |b| {
-        b.iter_batched(
-            || rng.gen::<u16>(),
-            |num| encode(num),
-            BatchSize::SmallInput,
-        )
+        b.iter_batched(|| rng.gen::<u16>(), encode, BatchSize::SmallInput)
     });
     group.finish();
 
@@ -517,11 +561,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     });
 
     group.bench_function("varint-simd", |b| {
-        b.iter_batched(
-            || rng.gen::<u32>(),
-            |num| encode(num),
-            BatchSize::SmallInput,
-        )
+        b.iter_batched(|| rng.gen::<u32>(), encode, BatchSize::SmallInput)
     });
     group.finish();
 
@@ -608,18 +648,14 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             || rng.gen::<u64>(),
             |num| {
                 target.clear();
-                prost_varint::encode_varint(num as u64, &mut target)
+                prost_varint::encode_varint(num, &mut target)
             },
             BatchSize::SmallInput,
         )
     });
 
     group.bench_function("varint-simd", |b| {
-        b.iter_batched(
-            || rng.gen::<u64>(),
-            |num| encode(num),
-            BatchSize::SmallInput,
-        )
+        b.iter_batched(|| rng.gen::<u64>(), encode, BatchSize::SmallInput)
     });
     group.finish();
 }

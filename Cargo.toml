@@ -2,7 +2,7 @@
 name = "varint-simd"
 version = "0.4.0"
 authors = ["Andrew Sun <me@andrewsun.com>"]
-edition = "2018"
+edition = "2021"
 license = "MIT OR Apache-2.0"
 description = "SIMD-accelerated varint encoder and decoder"
 repository = "https://github.com/as-com/varint-simd"
@@ -23,14 +23,14 @@ native-optimizations = []
 dangerously-force-enable-pdep-since-i-really-know-what-im-doing = []
 
 [dev-dependencies]
-criterion = "0.3"
-integer-encoding = "2.1"
+criterion = "0.5"
+integer-encoding = "4.0"
 rand = "0.8"
 bytes = "1" # prost-varint
 lazy_static = "1.4.0"
 
 [build-dependencies]
-rustc_version = "0.3.0"
+rustc_version = "0.4.0"
 
 [[bench]]
 name = "varint_bench"
