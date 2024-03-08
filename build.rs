@@ -50,7 +50,7 @@ fn pdep_speed() -> PdepPerf {
 }
 
 #[cfg(not(any(target_arch = "x86_64", target_arch = "x86")))]
-fn pdep_speed() -> bool {
+fn pdep_speed() -> PdepPerf {
     PdepPerf::Slow
 }
 
