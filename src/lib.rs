@@ -37,7 +37,7 @@ fn slice_m256i(n: __m256i) -> [i8; 32] {
     unsafe { core::mem::transmute(n) }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum VarIntDecodeError {
     Overflow,
     NotEnoughBytes,
