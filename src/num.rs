@@ -335,7 +335,7 @@ impl VarIntTarget for u64 {
     #[cfg(all(target_feature = "avx2", not(all(target_feature = "bmi2", fast_pdep))))]
     fn vector_to_num(res: [u8; 16]) -> Self {
         let pt1 = unsafe {
-            let b = core::mem::transmute(res);
+            let b = core::mem::transmute::<[u8; 16], __m128i>(res);
 
             let c = _mm_broadcastq_epi64(b);
             let d = _mm_or_si128(

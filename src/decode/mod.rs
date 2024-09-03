@@ -192,7 +192,7 @@ pub unsafe fn decode_unsafe<T: VarIntTarget>(bytes: *const u8) -> (T, usize) {
         // let varint_part0 = b0 & !(0xffffffffffffffff << len0.min(63));
         // let varint_part1 = b1 & !(0xffffffffffffffff << (((msbs0 == 0) as u32) * len1.min(63)));
 
-        let num = T::vector_to_num(core::mem::transmute([varint_part0, varint_part1]));
+        let num = T::vector_to_num(core::mem::transmute::<[u64; 2], [u8; 16]>([varint_part0, varint_part1]));
         let len = if msbs0 == 0 { len1 + 64 } else { len0 } / 8;
 
         (num, len as usize)
@@ -281,8 +281,8 @@ pub unsafe fn decode_two_unsafe<T: VarIntTarget, U: VarIntTarget>(
         first_num = T::cast_u32(x[0]);
         second_num = U::cast_u32(x[2]);
     } else {
-        first_num = T::vector_to_num(core::mem::transmute(first));
-        second_num = U::vector_to_num(core::mem::transmute(second));
+        first_num = T::vector_to_num(core::mem::transmute::<__m128i, [u8; 16]>(first));
+        second_num = U::vector_to_num(core::mem::transmute::<__m128i, [u8; 16]>(second));
     }
 
     (first_num, second_num, first_len as u8, second_len as u8)
@@ -326,8 +326,8 @@ unsafe fn decode_two_u32_unsafe<T: VarIntTarget, U: VarIntTarget>(
         first_num = T::cast_u32(x[0]);
         second_num = U::cast_u32(x[2]);
     } else {
-        first_num = T::vector_to_num(core::mem::transmute(comb));
-        second_num = U::vector_to_num(core::mem::transmute(_mm_bsrli_si128(comb, 8)));
+        first_num = T::vector_to_num(core::mem::transmute::<__m128i, [u8; 16]>(comb));
+        second_num = U::vector_to_num(core::mem::transmute::<__m128i, [u8; 16]>(_mm_bsrli_si128(comb, 8)));
     }
 
     (first_num, second_num, first_len, second_len)
@@ -518,8 +518,8 @@ pub unsafe fn decode_two_wide_unsafe<T: VarIntTarget, U: VarIntTarget>(
         first_num = T::cast_u64(_mm_extract_epi64(x, 0) as u64);
         second_num = U::cast_u64(_mm_extract_epi64(x, 1) as u64);
     } else {
-        first_num = T::vector_to_num(core::mem::transmute(first));
-        second_num = U::vector_to_num(core::mem::transmute(second));
+        first_num = T::vector_to_num(core::mem::transmute::<__m128i, [u8; 16]>(first));
+        second_num = U::vector_to_num(core::mem::transmute::<__m128i, [u8; 16]>(second));
     }
 
     (first_num, second_num, first_len as u8, second_len as u8)
@@ -656,10 +656,10 @@ pub unsafe fn decode_four_unsafe<
         third_num = V::cast_u32(x[2]);
         fourth_num = W::cast_u32(x[3]);
     } else {
-        first_num = T::vector_to_num(core::mem::transmute(first));
-        second_num = U::vector_to_num(core::mem::transmute(second));
-        third_num = V::vector_to_num(core::mem::transmute(third));
-        fourth_num = W::vector_to_num(core::mem::transmute(fourth));
+        first_num = T::vector_to_num(core::mem::transmute::<__m128i, [u8; 16]>(first));
+        second_num = U::vector_to_num(core::mem::transmute::<__m128i, [u8; 16]>(second));
+        third_num = V::vector_to_num(core::mem::transmute::<__m128i, [u8; 16]>(third));
+        fourth_num = W::vector_to_num(core::mem::transmute::<__m128i, [u8; 16]>(fourth));
     }
 
     (
@@ -743,10 +743,10 @@ unsafe fn decode_four_u16_unsafe<
         third_num = V::cast_u32(x[2]);
         fourth_num = W::cast_u32(x[3]);
     } else {
-        first_num = T::vector_to_num(core::mem::transmute(comb));
-        second_num = U::vector_to_num(core::mem::transmute(_mm_bsrli_si128(comb, 4)));
-        third_num = V::vector_to_num(core::mem::transmute(_mm_bsrli_si128(comb, 8)));
-        fourth_num = W::vector_to_num(core::mem::transmute(_mm_bsrli_si128(comb, 12)));
+        first_num = T::vector_to_num(core::mem::transmute::<__m128i, [u8; 16]>(comb));
+        second_num = U::vector_to_num(core::mem::transmute::<__m128i, [u8; 16]>(_mm_bsrli_si128(comb, 4)));
+        third_num = V::vector_to_num(core::mem::transmute::<__m128i, [u8; 16]>(_mm_bsrli_si128(comb, 8)));
+        fourth_num = W::vector_to_num(core::mem::transmute::<__m128i, [u8; 16]>(_mm_bsrli_si128(comb, 12)));
     }
 
     (
