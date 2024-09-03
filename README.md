@@ -18,7 +18,7 @@ other applications.
 
 ## Usage
 **Important:** Ensure the Rust compiler has an appropriate `target-cpu` setting. An example is provided in
-[`.cargo/config`](.cargo/config), but you may need to edit the file to specify the oldest CPUs your compiled
+[`.cargo/config.toml`](.cargo/config.toml), but you may need to edit the file to specify the oldest CPUs your compiled
 binaries will support. Your project will not compile unless this is set correctly. 
 
 The `native-optimizations` feature should be enabled if and only if `target-cpu` is set to `native`, such as in the 
