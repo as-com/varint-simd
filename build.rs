@@ -55,6 +55,10 @@ fn pdep_speed() -> PdepPerf {
 }
 
 fn main() {
+    println!("cargo:rustc-check-cfg=cfg(fast_pdep)");
+    println!("cargo:rustc-check-cfg=cfg(very_fast_pdep)");
+    println!("cargo:rustc-check-cfg=cfg(rustc_nightly)");
+
     if std::env::var(
         "CARGO_FEATURE_DANGEROUSLY_FORCE_ENABLE_PDEP_SINCE_I_REALLY_KNOW_WHAT_IM_DOING",
     )
