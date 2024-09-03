@@ -46,6 +46,8 @@ pub fn decode<T: VarIntTarget>(bytes: &[u8]) -> Result<(T, usize), VarIntDecodeE
         || result.1 > T::MAX_VARINT_BYTES as usize
     {
         Err(VarIntDecodeError::Overflow)
+    } else if result.1 > bytes.len() {
+        Err(VarIntDecodeError::NotEnoughBytes)
     } else {
         Ok(result)
     }

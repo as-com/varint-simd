@@ -37,7 +37,7 @@ fn slice_m256i(n: __m256i) -> [i8; 32] {
     unsafe { core::mem::transmute(n) }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum VarIntDecodeError {
     Overflow,
     NotEnoughBytes,
@@ -58,7 +58,7 @@ mod tests {
     use crate::decode_two_wide_unsafe;
     use crate::{
         decode, decode_eight_u8_unsafe, decode_four_unsafe, decode_len, decode_two_unsafe, encode,
-        encode_to_slice, VarIntTarget,
+        encode_to_slice, VarIntDecodeError, VarIntTarget,
     };
 
     use lazy_static::lazy_static;
@@ -206,6 +206,19 @@ mod tests {
     fn overflow_u64() {
         decode::<u8>(&[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x02])
             .expect_err("should overflow");
+    }
+
+    #[test]
+    fn truncated() {
+        for i in 1..10 {
+            let encoded = encode(1u64 << 7 * i);
+            for j in 0..=i {
+                assert_eq!(
+                    decode::<u64>(&encoded.0[..j]),
+                    Err(VarIntDecodeError::NotEnoughBytes)
+                );
+            }
+        }
     }
 
     fn check_decode_2x<T: VarIntTarget, U: VarIntTarget>(a: &[T], b: &[U]) {
