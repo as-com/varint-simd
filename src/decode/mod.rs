@@ -192,7 +192,10 @@ pub unsafe fn decode_unsafe<T: VarIntTarget>(bytes: *const u8) -> (T, usize) {
         // let varint_part0 = b0 & !(0xffffffffffffffff << len0.min(63));
         // let varint_part1 = b1 & !(0xffffffffffffffff << (((msbs0 == 0) as u32) * len1.min(63)));
 
-        let num = T::vector_to_num(core::mem::transmute::<[u64; 2], [u8; 16]>([varint_part0, varint_part1]));
+        let num = T::vector_to_num(core::mem::transmute::<[u64; 2], [u8; 16]>([
+            varint_part0,
+            varint_part1,
+        ]));
         let len = if msbs0 == 0 { len1 + 64 } else { len0 } / 8;
 
         (num, len as usize)
@@ -327,7 +330,9 @@ unsafe fn decode_two_u32_unsafe<T: VarIntTarget, U: VarIntTarget>(
         second_num = U::cast_u32(x[2]);
     } else {
         first_num = T::vector_to_num(core::mem::transmute::<__m128i, [u8; 16]>(comb));
-        second_num = U::vector_to_num(core::mem::transmute::<__m128i, [u8; 16]>(_mm_bsrli_si128(comb, 8)));
+        second_num = U::vector_to_num(core::mem::transmute::<__m128i, [u8; 16]>(_mm_bsrli_si128(
+            comb, 8,
+        )));
     }
 
     (first_num, second_num, first_len, second_len)
@@ -744,9 +749,15 @@ unsafe fn decode_four_u16_unsafe<
         fourth_num = W::cast_u32(x[3]);
     } else {
         first_num = T::vector_to_num(core::mem::transmute::<__m128i, [u8; 16]>(comb));
-        second_num = U::vector_to_num(core::mem::transmute::<__m128i, [u8; 16]>(_mm_bsrli_si128(comb, 4)));
-        third_num = V::vector_to_num(core::mem::transmute::<__m128i, [u8; 16]>(_mm_bsrli_si128(comb, 8)));
-        fourth_num = W::vector_to_num(core::mem::transmute::<__m128i, [u8; 16]>(_mm_bsrli_si128(comb, 12)));
+        second_num = U::vector_to_num(core::mem::transmute::<__m128i, [u8; 16]>(_mm_bsrli_si128(
+            comb, 4,
+        )));
+        third_num = V::vector_to_num(core::mem::transmute::<__m128i, [u8; 16]>(_mm_bsrli_si128(
+            comb, 8,
+        )));
+        fourth_num = W::vector_to_num(core::mem::transmute::<__m128i, [u8; 16]>(_mm_bsrli_si128(
+            comb, 12,
+        )));
     }
 
     (
