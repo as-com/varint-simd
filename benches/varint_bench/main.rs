@@ -335,7 +335,9 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             || rng.gen::<u8>(),
             |num| {
                 let mut target = [0u8; 16];
-                u8::encode_var(num, &mut target)
+                let bytes = u8::encode_var(num, &mut target);
+
+                (target, bytes)
             },
             BatchSize::SmallInput,
         )
@@ -437,7 +439,9 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             || rng.gen::<u16>(),
             |num| {
                 let mut target = [0u8; 16];
-                u16::encode_var(num, &mut target)
+                let bytes = u16::encode_var(num, &mut target);
+
+                (target, bytes)
             },
             BatchSize::SmallInput,
         )
@@ -530,7 +534,9 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             || rng.gen::<u32>(),
             |num| {
                 let mut target = [0u8; 16];
-                u32::encode_var(num, &mut target)
+                let bytes = u32::encode_var(num, &mut target);
+
+                (target, bytes)
             },
             BatchSize::SmallInput,
         )
@@ -624,7 +630,9 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             || rng.gen::<u64>(),
             |num| {
                 let mut target = [0u8; 16];
-                u64::encode_var(num, &mut target)
+                let bytes = u64::encode_var(num, &mut target);
+
+                (target, bytes)
             },
             BatchSize::SmallInput,
         )
