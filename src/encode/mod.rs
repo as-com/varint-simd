@@ -57,6 +57,45 @@ pub fn encode_to_slice<T: VarIntTarget>(num: T, slice: &mut [u8]) -> u8 {
     size
 }
 
+/// Calculate the length that will be required to encode a number to a varint.
+#[inline]
+#[cfg(any(target_feature = "sse2", doc))]
+#[cfg_attr(rustc_nightly, doc(cfg(target_feature = "sse2")))]
+pub fn encoded_len<T: VarIntTarget>(num: T) -> usize {
+    if T::MAX_VARINT_BYTES <= 5 {
+        let stage1 = num.num_to_scalar_stage1();
+
+        // We could OR the data with 1 to avoid undefined behavior, but for some reason it's still faster to take the branch
+        let leading = stage1.leading_zeros();
+
+        let unused_bytes = (leading - 1) / 8;
+        (8 - unused_bytes) as usize
+    } else {
+        // Break the number into 7-bit parts and spread them out into a vector
+        let stage1: __m128i = core::mem::transmute(num.num_to_vector_stage1());
+
+        // Create a mask for where there exist values
+        // This signed comparison works because all MSBs should be cleared at this point
+        // Also handle the special case when num == 0
+        let minimum = _mm_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xffu8 as i8);
+        let exists = _mm_or_si128(_mm_cmpgt_epi8(stage1, _mm_setzero_si128()), minimum);
+        let bits = _mm_movemask_epi8(exists);
+
+        // Count the number of bytes used
+        let bytes = 32 - bits.leading_zeros(); // lzcnt on supported CPUs
+
+        bytes as usize
+    }
+}
+
+/// Calculate the length that will be required to encode a number to a ZigZag varint.
+#[inline]
+#[cfg(any(target_feature = "sse2", doc))]
+#[cfg_attr(rustc_nightly, doc(cfg(target_feature = "sse2")))]
+pub fn encoded_zigzag_len<T: SignedVarIntTarget>(num: T) -> usize {
+    encoded_len(T::Unsigned::zigzag(num))
+}
+
 /// Encodes a single number to a varint. Requires SSE2 support.
 ///
 /// Produces a tuple, with the encoded data followed by the number of bytes used to encode the
