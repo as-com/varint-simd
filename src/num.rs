@@ -35,6 +35,12 @@ pub trait VarIntTarget: Debug + Eq + PartialEq + PartialOrd + Sized + Copy {
     /// Splits this number into 7-bit segments for encoding
     fn num_to_scalar_stage1(self) -> u64;
 
+    /// Same as `num_to_scalar_stage1`, but returns a u128 instead of a u64
+    /// This should be implemented when can't call num to scalar stage1 because the type is too big
+    fn num_to_big_scalar_stage1(self) -> u128 {
+        self.num_to_scalar_stage1() as u128
+    }
+
     /// Splits this number into 7-bit segments for encoding
     fn num_to_vector_stage1(self) -> [u8; 16];
 
@@ -458,6 +464,23 @@ impl VarIntTarget for u64 {
         res[1] = ((x & 0x7f00000000000000) >> 56) | ((x & 0x8000000000000000) >> 55);
 
         unsafe { core::mem::transmute(res) }
+    }
+
+    #[inline(always)]
+    #[rustfmt::skip]
+    fn num_to_big_scalar_stage1(self) -> u128 {
+        let x = self as u128;
+
+          (x & 0b0000000000000000000000000000000000000000000000000000000001111111)
+       | ((x & 0b0000000000000000000000000000000000000000000000000011111110000000) << 1)
+       | ((x & 0b0000000000000000000000000000000000000000000111111100000000000000) << 2)
+       | ((x & 0b0000000000000000000000000000000000001111111000000000000000000000) << 3)
+       | ((x & 0b0000000000000000000000000000011111110000000000000000000000000000) << 4)
+       | ((x & 0b0000000000000000000000111111100000000000000000000000000000000000) << 5)
+       | ((x & 0b0000000000000001111111000000000000000000000000000000000000000000) << 6)
+       | ((x & 0b0000000011111110000000000000000000000000000000000000000000000000) << 7)
+       | ((x & 0b0111111100000000000000000000000000000000000000000000000000000000) << 8)
+       | ((x & 0b1000000000000000000000000000000000000000000000000000000000000000) << 9)
     }
 
     #[inline(always)]
